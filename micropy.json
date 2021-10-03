@@ -1,0 +1,13 @@
+{
+    "name": "tesla_cooler",
+    "stubs": {
+        "rp2-micropython-1.15.0": "1.3.9"
+    },
+    "dev-packages": {
+        "micropy-cli": "*"
+    },
+    "packages": {},
+    "config": {
+        "pylint": true
+    }
+}
