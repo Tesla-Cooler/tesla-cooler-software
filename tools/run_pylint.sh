@@ -4,7 +4,6 @@
 # looked for by black.
 # Will exit non-zero if there are errors or incorrectly formatted python code.
 
-set -euo pipefail
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
 cd ${DIR}/..

@@ -11,7 +11,6 @@
 # Use an empty string or the special value 'all' for all tests.
 # Any additional arguments, directories and filenames are passed to pytest.
 
-set -euo pipefail
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 
 cd ${DIR}/..
