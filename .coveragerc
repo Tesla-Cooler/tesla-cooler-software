@@ -1,0 +1,4 @@
+
+[run]
+omit = venv/*,test/*,venvd/*,/usr/*"
+disable_warnings = no-data-collected
