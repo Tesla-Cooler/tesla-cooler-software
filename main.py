@@ -19,6 +19,8 @@ RESISTANCE_OF_PULLDOWN = 10_000
 
 COOLER_NAME_BY_INDEX = ["A", "B"]
 
+LOG_MSG = "Cooler: {cooler_name} is {temp} degrees. Setting fan: {fan_index} to duty: {fan_duty}."
+
 
 def main() -> None:
     """
@@ -29,30 +31,34 @@ def main() -> None:
     functions: "List[Tuples[Callable[[], float], Tuple[Callable[[int], int]]]]" = [
         (
             thermistor.thermistor_temperature(thermistor_pin),
-            (fan_controller.set_fan_speed(fan_pin) for fan_pin in fan_pins),
+            [fan_controller.set_fan_speed(fan_pin) for fan_pin in fan_pins],
         )
-        for thermistor_pin, fan_pins in zip(
-            [
-                (COOLER_A_THERMISTOR, COOLER_A_FAN_PINS),
-                (COOLER_B_THERMISTOR, COOLER_B_FAN_PINS),
-            ]
-        )
+        for thermistor_pin, fan_pins in [
+            (COOLER_A_THERMISTOR, COOLER_A_FAN_PINS),
+            (COOLER_B_THERMISTOR, COOLER_B_FAN_PINS),
+        ]
     ]
 
     while True:
+        try:
+            for cooler_index, (temp_function, speed_functions) in enumerate(functions):
+                cooler_temp = temp_function()
 
-        for cooler_index, (temp_function, speed_functions) in enumerate(functions):
-            cooler_temp = temp_function()
+                for fan_index, speed_function in enumerate(speed_functions):
+                    new_speed = speed_function(cooler_temp)
+                    print(
+                        LOG_MSG.format(
+                            cooler_name=COOLER_NAME_BY_INDEX[cooler_index],
+                            temp=cooler_temp,
+                            fan_index=fan_index,
+                            fan_duty=new_speed,
+                        )
+                    )
 
-            for fan_index, speed_function in enumerate(speed_functions):
-                new_speed = speed_function(cooler_temp)
+        except Exception as e:  # pylint: disable=broad-except
+            print(f"Ran into exception in main loop: {e}")
 
-                print(
-                    f"Set Cooler: {COOLER_NAME_BY_INDEX[cooler_index]} "
-                    f"fan: {fan_index} "
-                    f"to duty: {new_speed}."
-                )
-
+        print("sleeping...")
         utime.sleep(0.5)
 
 
