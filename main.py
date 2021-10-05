@@ -1,7 +1,9 @@
 """Main module."""
 
 import utime
-from machine import ADC, Pin
+from machine import ADC
+
+from tesla_cooler import thermistor
 
 COOLER_FAN_PINS = [1, 3, 5, 7, 9, 11, 25]
 
@@ -14,23 +16,12 @@ def main() -> None:
     :return: None
     """
 
-    pins = [Pin(pin_number, Pin.OUT) for pin_number in COOLER_FAN_PINS]
+    thermistor_pin = ADC(26)
+    current_temp = thermistor.thermistor_temperature(pin=thermistor_pin)
 
     while True:
-
-        for pin in pins:
-            pin.toggle()
-
+        print(f"Current temp: {(current_temp() * 1.8) + 32} deg F")
         utime.sleep(1)
-
-
-def print_resistor(pin: ADC) -> None:
-    """
-
-    :return:
-    """
-
-    return (RESISTANCE_OF_PULLDOWN * (65535 / pin.read_u16())) - RESISTANCE_OF_PULLDOWN
 
 
 if __name__ == "__main__":
