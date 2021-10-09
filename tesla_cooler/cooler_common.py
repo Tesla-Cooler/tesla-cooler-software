@@ -3,7 +3,7 @@ Common code used across multiple library modules.
 """
 
 try:
-    from typing import List  # pylint: disable=unused-import
+    from typing import Sequence, TypeVar, Union  # pylint: disable=unused-import
 except ImportError:
     pass  # we're probably on the pico if this occurs.
 
@@ -11,7 +11,9 @@ except ImportError:
 U_16_MAX = 65535
 
 
-def closest_to_value(value: float, list_of_values: "List[float]") -> float:
+def closest_to_value(
+    value: float, list_of_values: "Union[Sequence[int], Sequence[float]]"
+) -> "Union[int, float]":
     """
     Given a value, and a list of values, find the closest value in the list to the input.
     :param value: Value to find in list.

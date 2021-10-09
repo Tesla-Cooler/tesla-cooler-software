@@ -1,5 +1,6 @@
 black==20.8b1
 isort~=5.7.0
+matplotlib
 micropy-cli
 pre-commit~=2.11.1
 pylint~=2.7.3

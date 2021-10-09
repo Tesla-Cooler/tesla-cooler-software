@@ -14,10 +14,10 @@ from tesla_cooler import cooler_common
 
 # Determined both of these through experimentation.
 PWM_FREQ = 30_000
-SLOWEST_POSSIBLE_SPEED_DUTY = 39000
+SLOWEST_POSSIBLE_SPEED_DUTY = 40_000
 
 
-def set_fan_speed(pin_number: int) -> "Callable[[int], int]":
+def set_fan_speed(pin_number: int) -> "Callable[[float], int]":
     """
     Creates a function that accepts a temperature and sets the given fan to the best value to
     handle that temperature.
@@ -30,7 +30,7 @@ def set_fan_speed(pin_number: int) -> "Callable[[int], int]":
     pwm.freq(PWM_FREQ)
 
     temperature_to_duty = {
-        26.0: SLOWEST_POSSIBLE_SPEED_DUTY,
+        30: SLOWEST_POSSIBLE_SPEED_DUTY,
         70: SLOWEST_POSSIBLE_SPEED_DUTY
         + (cooler_common.U_16_MAX - SLOWEST_POSSIBLE_SPEED_DUTY) // 2,
         80: cooler_common.U_16_MAX,
@@ -47,7 +47,7 @@ def set_fan_speed(pin_number: int) -> "Callable[[int], int]":
         """
 
         duty = temperature_to_duty[
-            cooler_common.closest_to_value(value=temperature, list_of_values=temperatures)
+            int(cooler_common.closest_to_value(value=temperature, list_of_values=temperatures))
         ]
 
         pwm.duty_u16(duty)

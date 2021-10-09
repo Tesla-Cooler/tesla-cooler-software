@@ -1,25 +1,25 @@
-"""Main module."""
+"""
+Main module, gets run on boot by the pico.
+"""
 
 import utime
 
 from tesla_cooler import fan_controller, thermistor
+from tesla_cooler.pcb_constants import (
+    COOLER_A_FAN_PINS,
+    COOLER_A_THERMISTOR,
+    COOLER_B_FAN_PINS,
+    COOLER_B_THERMISTOR,
+)
 
 try:
-    from typing import Callable, Dict, List, Tuple  # pylint: disable=unused-import
+    from typing import Callable, List, Tuple  # pylint: disable=unused-import
 except ImportError:
     pass  # we're probably on the pico if this occurs.
 
-COOLER_A_THERMISTOR = 26
-COOLER_B_THERMISTOR = 27
-
-COOLER_A_FAN_PINS = (1, 3, 5)
-COOLER_B_FAN_PINS = (7, 9, 11)
-
-RESISTANCE_OF_PULLDOWN = 10_000
-
 COOLER_NAME_BY_INDEX = ["A", "B"]
 
-LOG_MSG = "Cooler: {cooler_name} is {temp} degrees. Setting fan: {fan_index} to duty: {fan_duty}."
+LOG_MSG = "Cooler: {name} is {temperature} degrees. Setting fan: {fan} to duty: {duty}."
 
 
 def main() -> None:
@@ -28,7 +28,7 @@ def main() -> None:
     :return: None
     """
 
-    functions: "List[Tuples[Callable[[], float], Tuple[Callable[[int], int]]]]" = [
+    functions: "List[Tuple[Callable[[], float], List[Callable[[float], int]]]]" = [
         (
             thermistor.thermistor_temperature(thermistor_pin),
             [fan_controller.set_fan_speed(fan_pin) for fan_pin in fan_pins],
@@ -43,18 +43,16 @@ def main() -> None:
         try:
             for cooler_index, (temp_function, speed_functions) in enumerate(functions):
                 cooler_temp = temp_function()
-
                 for fan_index, speed_function in enumerate(speed_functions):
                     new_speed = speed_function(cooler_temp)
                     print(
                         LOG_MSG.format(
-                            cooler_name=COOLER_NAME_BY_INDEX[cooler_index],
-                            temp=cooler_temp,
-                            fan_index=fan_index,
-                            fan_duty=new_speed,
+                            name=COOLER_NAME_BY_INDEX[cooler_index],
+                            temperature=cooler_temp,
+                            fan=fan_index,
+                            duty=new_speed,
                         )
                     )
-
         except Exception as e:  # pylint: disable=broad-except
             print(f"Ran into exception in main loop: {e}")
 
