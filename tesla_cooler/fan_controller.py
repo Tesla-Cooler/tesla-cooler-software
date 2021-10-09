@@ -6,52 +6,155 @@ TODO: add more docs here
 from machine import PWM, Pin
 
 try:
-    from typing import Callable, Dict, List  # pylint: disable=unused-import
+    from typing import Callable, Dict, List, Sequence, Tuple  # pylint: disable=unused-import
 except ImportError:
     pass  # we're probably on the pico if this occurs.
 
-from tesla_cooler import cooler_common
 
 # Determined both of these through experimentation.
 PWM_FREQ = 30_000
-SLOWEST_POSSIBLE_SPEED_DUTY = 40_000
+
+SLOWEST_POSSIBLE_SPEED_DUTY = 40_000  # Determined experimentally
+MAX_DUTY = 65_025  # Per Raspberry Pi Pico Docs
+
+POWER_MIN, POWER_MAX = (0, 1)
+
+WEIGHT_RANGES = (
+    (0, 1000),  # Makes no noise.
+    (1001, 2000),  # Makes some noise.
+    (2001, 3000),  # Makes a lot of noise.
+)
 
 
-def set_fan_speed(pin_number: int) -> "Callable[[float], int]":
+def total_weight(values: Sequence[int], scope_to_weight: Dict[Tuple[int, int], int]) -> int:
     """
-    Creates a function that accepts a temperature and sets the given fan to the best value to
-    handle that temperature.
-    :param pin_number: the pin the fan is attached to.
-    :return: The function to make the conversion and write the value. Returns the resulting duty
-    cycle.
+
+    :param values:
+    :param scope_to_weight:
+    :return:
+    """
+
+    return sum(
+        filter(
+            lambda weight: weight is not None,
+            [
+                0 if value == 0 else (weight if scope_min <= value <= scope_max else None)
+                for (scope_min, scope_max), weight in scope_to_weight.items()
+                for value in values
+            ],
+        )
+    )
+
+
+def setup_pwm(pin_number: int) -> PWM:
+    """
+
+    :param pin_number:
+    :return:
     """
 
     pwm = PWM(Pin(pin_number))
     pwm.freq(PWM_FREQ)
+    return pwm
 
-    temperature_to_duty = {
-        30: SLOWEST_POSSIBLE_SPEED_DUTY,
-        70: SLOWEST_POSSIBLE_SPEED_DUTY
-        + (cooler_common.U_16_MAX - SLOWEST_POSSIBLE_SPEED_DUTY) // 2,
-        80: cooler_common.U_16_MAX,
-    }
 
-    temperatures = list(temperature_to_duty.keys())
+def linear_interpolate(x: float, in_min: float, in_max: float, out_min: int, out_max: int) -> int:
+    """
+    Works like Arduino's `map`, thanks to this post for the port:
+    https://forum.micropython.org/viewtopic.php?f=2&t=7615
+    :param x: Value to scale.
+    :param in_min: Minimum bound of input.
+    :param in_max: Max bound of input.
+    :param out_min: Minimum output.
+    :param out_max: Maximum output.
+    :return: Scaled value in the space between `out_min` and `out_max`.
+    """
+    return int((x - in_min) * (out_max - out_min) // (in_max - in_min) + out_min)
 
-    def set_speed_for_temperature(temperature: float) -> int:
+
+def combinations_to_sum(  # pylint: disable=unused-argument
+    potential_values: Sequence[int], target_length: int, target_value: int
+) -> List[Tuple[int, ...]]:
+    """
+    TODO!
+    :param potential_values: Complete list of candidate values to add together to make
+    `target_value`.
+    :param target_length: Number of values that can be added together to make `target_value`.
+    :param target_value: Value to create.
+    :return: A list of tuples that add up to `target_value`.
+    """
+
+
+class CoolerManager:
+    """
+    Goals are:
+
+    * To have each of the individual fans spinning as slow as possible, three fans spinning slowly
+    is better than two fans spinning quickly.
+
+    * Whenever fewer than all fans are operating, we should expose a way to rotate which of the
+    fans are on to prevent uneven wear between the fans over time
+
+    * When asking fans to spin below the speed they can start and get to, make sure they first
+    spin up to a speed where they can then spin down to the target speed.
+
+    Assumptions:
+
+    * All of the attached fans are the same model, and all cost the same to drive.
+
+    """
+
+    def __init__(self: "CoolerManager", pin_numbers: "Tuple[int, ...]"):
         """
-        Use a lookup table to go from temperature to fan speed, then set the fan speed to the
-        best value for the input.
-        :param temperature: Temp read by thermistor, the temp of the card.
-        :return: None
+
+        :param pin_numbers:
         """
 
-        duty = temperature_to_duty[
-            int(cooler_common.closest_to_value(value=temperature, list_of_values=temperatures))
+        self._pwm_controllers: "List[PWM]" = [setup_pwm(pin_number) for pin_number in pin_numbers]
+
+    def power(self: "CoolerManager", new_power: float) -> Tuple[int, ...]:
+        """
+
+        :param new_power: Float between 0 and 1. 0 maps to a single fan spinning as slowly as
+        possible, 1 maps to all fans spinning as fast as possible.
+
+        :return:
+        """
+
+        target_counts = linear_interpolate(
+            x=new_power,
+            in_min=POWER_MIN,
+            in_max=POWER_MAX,
+            out_min=SLOWEST_POSSIBLE_SPEED_DUTY,
+            out_max=MAX_DUTY * len(self._pwm_controllers),
+        )
+
+        candidate_speeds: List[Tuple[int, ...]] = combinations_to_sum(
+            potential_values=list(range(SLOWEST_POSSIBLE_SPEED_DUTY, MAX_DUTY)),
+            target_length=len(self._pwm_controllers),
+            target_value=target_counts,
+        )
+
+        scope_to_weight = {
+            scope: (scope_index + 1) ** 3 for scope_index, scope in enumerate(WEIGHT_RANGES)
+        }
+
+        weights_and_speeds = [
+            (total_weight(values=speeds, scope_to_weight=scope_to_weight), speeds)
+            for speeds in candidate_speeds
         ]
 
-        pwm.duty_u16(duty)
+        quietest_speeds = min(
+            weights_and_speeds, key=lambda weight_and_speeds: weight_and_speeds[0]
+        )[1]
 
-        return duty
+        for pwm_pin, speed in zip(self._pwm_controllers, quietest_speeds):
+            pwm_pin.duty_u16(speed)
 
-    return set_speed_for_temperature
+        return quietest_speeds
+
+    def rotate_active(self: "CoolerManager") -> "Tuple[int, ...]":
+        """
+
+        :return:
+        """
