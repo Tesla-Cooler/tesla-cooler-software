@@ -4,7 +4,6 @@ Copied from https://github.com/m-lundberg/simple-pid
 
 Note: Some of this functionality is not relevant to the rest of this application and could
 be deleted to save some space. Particularly around changing parameters during a run.
-
 """
 
 try:

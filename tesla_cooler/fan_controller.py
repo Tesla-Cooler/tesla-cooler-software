@@ -5,6 +5,8 @@ TODO: add more docs here
 
 from machine import PWM, Pin
 
+from tesla_cooler.fan_speed_control import combinations_to_sum, linear_interpolate, total_weight
+
 try:
     from typing import Callable, Dict, List, Sequence, Tuple  # pylint: disable=unused-import
 except ImportError:
@@ -26,26 +28,6 @@ WEIGHT_RANGES = (
 )
 
 
-def total_weight(values: Sequence[int], scope_to_weight: Dict[Tuple[int, int], int]) -> int:
-    """
-
-    :param values:
-    :param scope_to_weight:
-    :return:
-    """
-
-    return sum(
-        filter(
-            lambda weight: weight is not None,
-            [
-                0 if value == 0 else (weight if scope_min <= value <= scope_max else None)
-                for (scope_min, scope_max), weight in scope_to_weight.items()
-                for value in values
-            ],
-        )
-    )
-
-
 def setup_pwm(pin_number: int) -> PWM:
     """
 
@@ -56,33 +38,6 @@ def setup_pwm(pin_number: int) -> PWM:
     pwm = PWM(Pin(pin_number))
     pwm.freq(PWM_FREQ)
     return pwm
-
-
-def linear_interpolate(x: float, in_min: float, in_max: float, out_min: int, out_max: int) -> int:
-    """
-    Works like Arduino's `map`, thanks to this post for the port:
-    https://forum.micropython.org/viewtopic.php?f=2&t=7615
-    :param x: Value to scale.
-    :param in_min: Minimum bound of input.
-    :param in_max: Max bound of input.
-    :param out_min: Minimum output.
-    :param out_max: Maximum output.
-    :return: Scaled value in the space between `out_min` and `out_max`.
-    """
-    return int((x - in_min) * (out_max - out_min) // (in_max - in_min) + out_min)
-
-
-def combinations_to_sum(  # pylint: disable=unused-argument
-    potential_values: Sequence[int], target_length: int, target_value: int
-) -> List[Tuple[int, ...]]:
-    """
-    TODO!
-    :param potential_values: Complete list of candidate values to add together to make
-    `target_value`.
-    :param target_length: Number of values that can be added together to make `target_value`.
-    :param target_value: Value to create.
-    :return: A list of tuples that add up to `target_value`.
-    """
 
 
 class CoolerManager:
@@ -130,7 +85,7 @@ class CoolerManager:
         )
 
         candidate_speeds: List[Tuple[int, ...]] = combinations_to_sum(
-            potential_values=list(range(SLOWEST_POSSIBLE_SPEED_DUTY, MAX_DUTY)),
+            potential_values=tuple(range(SLOWEST_POSSIBLE_SPEED_DUTY, MAX_DUTY)),
             target_length=len(self._pwm_controllers),
             target_value=target_counts,
         )
