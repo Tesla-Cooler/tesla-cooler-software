@@ -6,7 +6,8 @@ Main module, gets run on boot by the pico.
 
 import utime
 
-from tesla_cooler import fan_controller, thermistor
+from tesla_cooler import cooler_manager, thermistor
+from tesla_cooler.fan_constants import GM1204PQV1_8A
 from tesla_cooler.pcb_constants import (
     COOLER_A_FAN_PINS,
     COOLER_A_THERMISTOR,
@@ -31,10 +32,14 @@ def main() -> None:
     """
 
     cooler_a_temp_function = thermistor.thermistor_temperature(COOLER_A_THERMISTOR)
-    cooler_a_manager = fan_controller.CoolerManager(pin_numbers=COOLER_A_FAN_PINS)
+    cooler_a_manager = cooler_manager.CoolerManager(
+        pin_numbers=COOLER_A_FAN_PINS, fan_constants=GM1204PQV1_8A
+    )
 
     cooler_b_temp_function = thermistor.thermistor_temperature(COOLER_B_THERMISTOR)
-    cooler_b_manager = fan_controller.CoolerManager(pin_numbers=COOLER_B_FAN_PINS)
+    cooler_b_manager = cooler_manager.CoolerManager(
+        pin_numbers=COOLER_B_FAN_PINS, fan_constants=GM1204PQV1_8A
+    )
 
     while True:
         print("sleeping...")

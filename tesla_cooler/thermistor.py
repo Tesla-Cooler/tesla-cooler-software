@@ -8,14 +8,13 @@ import json
 
 from machine import ADC
 
-from tesla_cooler.cooler_common import U_16_MAX, closest_to_value
-
 try:
-    from typing import Callable, Dict, List  # pylint: disable=unused-import
+    from typing import Callable, Dict, List, Sequence, Union  # pylint: disable=unused-import
 except ImportError:
     pass  # we're probably on the pico if this occurs.
 
 RESISTANCE_OF_PULLDOWN = 10_000
+U_16_MAX = 65535
 
 DEFAULT_JSON_PATH = "./tesla_cooler/temperature_lookup.json"
 
@@ -32,6 +31,20 @@ def _thermistor_resistance(
     :return: The resistance in Ohms as a float.
     """
     return float((pulldown_resistance * (vin_count / pin.read_u16())) - pulldown_resistance)
+
+
+def _closest_to_value(
+    value: float, list_of_values: "Union[Sequence[int], Sequence[float]]"
+) -> "Union[int, float]":
+    """
+    Given a value, and a list of values, find the closest value in the list to the input.
+    :param value: Value to find in list.
+    :param list_of_values: Candidate output values.
+    :return: The value closest to `value` in `list_of_values`.
+    """
+    return list_of_values[
+        min(range(len(list_of_values)), key=lambda i: abs(list_of_values[i] - value))
+    ]
 
 
 def thermistor_temperature(
@@ -62,6 +75,6 @@ def thermistor_temperature(
         :return: The current temperature detected by the attached resistor in degrees centigrade.
         """
         current_resistance = _thermistor_resistance(pin=pin)
-        return resistance_to_temperature[closest_to_value(current_resistance, resistances)]
+        return resistance_to_temperature[_closest_to_value(current_resistance, resistances)]
 
     return current_temperature
