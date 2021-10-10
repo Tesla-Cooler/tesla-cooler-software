@@ -5,7 +5,12 @@ TODO: add more docs here
 
 from machine import PWM, Pin
 
-from tesla_cooler.fan_speed_control import combinations_to_sum, linear_interpolate, total_weight
+from tesla_cooler.fan_speed_control import (
+    WEIGHT_RANGES,
+    combinations_to_sum,
+    linear_interpolate,
+    weigh_values,
+)
 
 try:
     from typing import Callable, Dict, List, Sequence, Tuple  # pylint: disable=unused-import
@@ -18,14 +23,6 @@ PWM_FREQ = 30_000
 
 SLOWEST_POSSIBLE_SPEED_DUTY = 40_000  # Determined experimentally
 MAX_DUTY = 65_025  # Per Raspberry Pi Pico Docs
-
-POWER_MIN, POWER_MAX = (0, 1)
-
-WEIGHT_RANGES = (
-    (0, 1000),  # Makes no noise.
-    (1001, 2000),  # Makes some noise.
-    (2001, 3000),  # Makes a lot of noise.
-)
 
 
 def setup_pwm(pin_number: int) -> PWM:
@@ -95,7 +92,7 @@ class CoolerManager:
         }
 
         weights_and_speeds = [
-            (total_weight(values=speeds, scope_to_weight=scope_to_weight), speeds)
+            (weigh_values(values=speeds, scope_to_weight=scope_to_weight), speeds)
             for speeds in candidate_speeds
         ]
 
