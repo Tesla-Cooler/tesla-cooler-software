@@ -3,6 +3,7 @@ Functions for controlling the speed of fans.
 TODO: add more docs here
 """
 
+import utime
 from machine import PWM, Pin
 
 from tesla_cooler.fan_constants import FanConstants
@@ -17,6 +18,25 @@ except ImportError:
 
 # TODO, figure out how well the pico performs here
 DEFAULT_SPEEDS_PER_POWER = 50
+
+
+def set_fan_to_duty(pwm_pin: PWM, duty: int, min_cold_start_duty: int) -> None:
+    """
+    Write the pwm pin to the given duty cycle.
+    :param pwm_pin: Pin to modify.
+    :param duty: Target duty cycle.
+    :param min_cold_start_duty: Slowest speed the fan can reliably spin to after starting.
+    :return: None
+    """
+
+    current_fan_duty = pwm_pin.duty_u16()
+
+    if current_fan_duty == 0 and duty < min_cold_start_duty:
+        pwm_pin.duty_u16(min_cold_start_duty)
+        utime.sleep(1)
+        # Fan should now be spinning and can reach lower RPMs without stalling.
+
+    pwm_pin.duty_u16(duty)
 
 
 class CoolerFanManager:
@@ -81,7 +101,11 @@ class CoolerFanManager:
         )
 
         for pwm_pin, speed in zip(self._pwm_controllers, speeds):
-            pwm_pin.duty_u16(speed)
+            set_fan_to_duty(
+                pwm_pin=pwm_pin,
+                duty=speed,
+                min_cold_start_duty=self._fan_constants.min_cold_start_duty,
+            )
 
         return speeds
 

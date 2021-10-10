@@ -13,8 +13,13 @@ MAX_DUTY = 65_025  # Per Raspberry Pi Pico Docs
 FanConstants = namedtuple(
     "FanConstants",
     [
-        "pwm_freq",  # Should be the slowest possible pwm frequency that produces no coil whine.
-        "duty_ranges",  # Ranges of duty cycles (at `pwm_freq`) that the fan can be driven at.
+        # Should be the slowest possible pwm frequency that produces no coil whine.
+        "pwm_freq",
+        # Ranges of duty cycles (at `pwm_freq`) that the fan can be driven at.
+        "duty_ranges",
+        # When this duty cycle is applied, the fan transitions from not moving at all, to it's
+        # slowest possible speed.
+        "min_cold_start_duty",
     ],
 )
 
@@ -33,4 +38,5 @@ GM1204PQV1_8A = FanConstants(
         (50_001, 60_000),  # Makes a lot of noise.
         (60_001, MAX_DUTY),
     ),
+    min_cold_start_duty=40_000,  # TODO: actually measure this
 )
