@@ -64,7 +64,6 @@ def test__weigh_values(
     :param expected_result: Expected output of function under test.
     :return: None
     """
-
     assert (
         fan_speed_control._weigh_values(  # pylint: disable=protected-access
             values=values, range_to_weight=range_to_weight

@@ -30,7 +30,6 @@ def _weigh_values(values: "Tuple[int, ...]", range_to_weight: "Dict[Tuple[int, i
     }
     :return: The total weight of `values`.
     """
-
     return sum(
         filter(
             lambda weight: weight is not None,
@@ -81,7 +80,6 @@ def _combinations_to_sum(  # pylint: disable=unused-argument
     be returned.
     :return: A list of tuples that add up to `target_value`.
     """
-
     target_min = target_value - tolerance
     target_max = target_value + tolerance
 
@@ -154,7 +152,6 @@ def fan_drive_values(
     spinning as quickly as possible.
     :return: A tuple of duty cycles to write to fans.
     """
-
     min_output, max_output = _ranges_to_stats(output_ranges)
 
     # The values written to the three fans are trying to spin this quickly.

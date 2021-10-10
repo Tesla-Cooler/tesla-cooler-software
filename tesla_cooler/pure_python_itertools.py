@@ -28,7 +28,6 @@ def combinations_with_replacement(  # type: ignore
     :return: `r` length subsequences of elements from the input iterable allowing individual
     elements to be repeated more than once.
     """
-
     pool = tuple(iterable)
     n = len(pool)
     if not n and r:
@@ -51,7 +50,6 @@ def chain_from_iterable(iterables: "Iterable[Iterable[Any]]"):  # type: ignore
     :param iterables: Iterable of Iterables to combine.
     :return: Each element in each input iterable as a single iterable.
     """
-
     for it in iterables:
         for element in it:
             yield element

@@ -19,7 +19,7 @@ except ImportError:
 DEFAULT_SPEEDS_PER_POWER = 50
 
 
-class CoolerManager:
+class CoolerFanManager:
     """
     Manages a single cooler's group of fans.
 
@@ -36,7 +36,7 @@ class CoolerManager:
     """
 
     def __init__(
-        self: "CoolerManager",
+        self: "CoolerFanManager",
         pin_numbers: "Tuple[int, ...]",
         fan_constants: FanConstants,
         speeds_per_power: int = DEFAULT_SPEEDS_PER_POWER,
@@ -54,7 +54,6 @@ class CoolerManager:
             :param pin_number: Pin number on the Pico
             :return: PWM object ready to go.
             """
-
             pwm = PWM(Pin(pin_number))
             pwm.freq(fan_constants.pwm_freq)
             return pwm
@@ -63,7 +62,7 @@ class CoolerManager:
         self._fan_constants = fan_constants
         self._speeds_per_power = speeds_per_power
 
-    def power(self: "CoolerManager", new_power: float) -> "Tuple[int, ...]":
+    def power(self: "CoolerFanManager", new_power: float) -> "Tuple[int, ...]":
         """
         Set the attached fans to the given power. Logic under the hood decides how that actually
         translates to rotational speed of each of the fans, see `fan_drive_values` for more
@@ -86,7 +85,7 @@ class CoolerManager:
 
         return speeds
 
-    def rotate_active(self: "CoolerManager") -> None:
+    def rotate_active(self: "CoolerFanManager") -> None:
         """
         Rotating the order of the objects in memory does the trick as speeds are always written
         in order of fastest speed first.
