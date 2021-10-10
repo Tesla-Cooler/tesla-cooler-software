@@ -24,6 +24,9 @@ except ImportError:
 
 LOG_MSG = "Cooler: {name} is {temperature} degrees C. Setting fans: {duty_cycles}"
 
+# TODO, figure out how well the pico performs here
+DEFAULT_SPEEDS_PER_POWER = 50
+
 
 def cooler_loop(cooler_name: str, thermistor_pin: int, fan_pins: Tuple[int, ...]) -> None:
     """
@@ -43,7 +46,9 @@ def cooler_loop(cooler_name: str, thermistor_pin: int, fan_pins: Tuple[int, ...]
     )
 
     cooler_temp_function = thermistor.thermistor_temperature(thermistor_pin)
-    cooler_fan_manager = CoolerFanManager(pin_numbers=fan_pins, fan_constants=GM1204PQV1_8A)
+    cooler_fan_manager = CoolerFanManager(
+        pin_numbers=fan_pins, fan_constants=GM1204PQV1_8A, speeds_per_power=DEFAULT_SPEEDS_PER_POWER
+    )
 
     cooler_fan_manager.power(new_power=0)
 

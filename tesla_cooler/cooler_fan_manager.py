@@ -16,10 +16,6 @@ except ImportError:
     pass  # we're probably on the pico if this occurs.
 
 
-# TODO, figure out how well the pico performs here
-DEFAULT_SPEEDS_PER_POWER = 50
-
-
 def set_fan_to_duty(pwm_pin: PWM, duty: int, min_cold_start_duty: int) -> None:
     """
     Write the pwm pin to the given duty cycle.
@@ -59,7 +55,7 @@ class CoolerFanManager:
         self: "CoolerFanManager",
         pin_numbers: "Tuple[int, ...]",
         fan_constants: FanConstants,
-        speeds_per_power: int = DEFAULT_SPEEDS_PER_POWER,
+        speeds_per_power: int,
     ):
         """
         :param pin_numbers: Locations of the mosfets that control the fans.
