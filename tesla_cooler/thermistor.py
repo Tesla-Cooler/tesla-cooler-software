@@ -21,7 +21,7 @@ U_16_MAX = 65535
 # Determined experimentally
 DEFAULT_THERMISTOR_SAMPLES = 10
 
-DEFAULT_JSON_PATH = "./tesla_cooler/10K_3950_NTC_temperature_lookup"
+DEFAULT_JSON_PATH = "./tesla_cooler/10K_3950_NTC_temperature_lookup.json"
 
 
 def _thermistor_resistance(

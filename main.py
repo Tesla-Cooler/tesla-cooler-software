@@ -2,7 +2,7 @@
 Main module, gets run on boot by the pico.
 """
 
-from machine import WDT, Timer
+from machine import Timer
 
 from tesla_cooler import thermistor
 from tesla_cooler.cooler_fan_manager import CoolerFanManager
@@ -62,7 +62,7 @@ def create_cooler_callback(
         pin_numbers=fan_pins, fan_constants=fan_constants, speeds_per_power=DEFAULT_SPEEDS_PER_POWER
     )
 
-    def cooler_callback() -> None:
+    def cooler_callback(timer: Timer) -> None:  # pylint: disable=unused-argument
         """
         This function will be called by the timer. This function does the following:
         1. Read the current temperature off of the thermistor.
@@ -70,6 +70,7 @@ def create_cooler_callback(
         3. Converts cooler power into the actual PWM duty cycle values to be written to the fans
         and actually writes the values to the fans.
         4. Logs status (if configured)
+        :param timer: Provided by the timer interface but not consumed.
         :return: None
         """
 
@@ -93,32 +94,6 @@ def create_cooler_callback(
     return cooler_callback
 
 
-def create_call_callback_feed_wdt(
-    callback: Callable[[], None], watchdog_timer: WDT
-) -> Callable[[Timer], None]:
-    """
-    Create a function for use with a timer that calls an arbitrary function, then feeds a
-    watchdog timer.
-    :param callback: Input function.
-    :param watchdog_timer: Timer to feed.
-    :return: Callable to be consumed by timer.
-    """
-
-    def call_callback_feed_wdt(timer: Timer) -> None:  # pylint: disable=unused-argument
-        """
-        Calls the input function, then feeds the watchdog timer.
-        Note: if the callback fails, the watchdog timer will never get fed and will bring down
-        the application. This is the behavior we want!
-        :param timer: Provided by the timer interface but not consumed.
-        :return: None
-        """
-
-        callback()
-        watchdog_timer.feed()
-
-    return call_callback_feed_wdt
-
-
 def main() -> None:
     """
     Main entry point for tesla_cooler.
@@ -128,47 +103,36 @@ def main() -> None:
         Because this function is non-blocking, you can REPL into the pico and interact with it while
         the coolers are running.
 
-    Watchdog Timers:
-        Creates two watchdog timers that restart the application if either of the timers stop
-        functioning.
-
     :return: None
     """
 
     resistance_to_temperature = thermistor.read_resistance_to_temperature()
 
-    watchdog_timer_timeout = DEFAULT_COOLER_UPDATE_MS + 500
-
     Timer().init(
         period=DEFAULT_COOLER_UPDATE_MS,
         mode=Timer.PERIODIC,
-        callback=create_call_callback_feed_wdt(
-            callback=create_cooler_callback(
-                cooler_name="A",
-                thermistor_pin=COOLER_A_THERMISTOR,
-                fan_pins=COOLER_A_FAN_PINS,
-                fan_constants=GM1204PQV1_8A_SHORT_WIRE,
-                resistance_to_temperature=resistance_to_temperature,
-            ),
-            watchdog_timer=WDT(timeout=watchdog_timer_timeout),
+        callback=create_cooler_callback(
+            cooler_name="A",
+            thermistor_pin=COOLER_A_THERMISTOR,
+            fan_pins=COOLER_A_FAN_PINS,
+            fan_constants=GM1204PQV1_8A_SHORT_WIRE,
+            resistance_to_temperature=resistance_to_temperature,
         ),
     )
 
     Timer().init(
         period=DEFAULT_COOLER_UPDATE_MS,
         mode=Timer.PERIODIC,
-        callback=create_call_callback_feed_wdt(
-            callback=create_cooler_callback(
-                cooler_name="B",
-                thermistor_pin=COOLER_B_THERMISTOR,
-                fan_pins=COOLER_B_FAN_PINS,
-                fan_constants=GM1204PQV1_8A_LONG_WIRE,
-                resistance_to_temperature=resistance_to_temperature,
-            ),
-            watchdog_timer=WDT(timeout=watchdog_timer_timeout),
+        callback=create_cooler_callback(
+            cooler_name="B",
+            thermistor_pin=COOLER_B_THERMISTOR,
+            fan_pins=COOLER_B_FAN_PINS,
+            fan_constants=GM1204PQV1_8A_LONG_WIRE,
+            resistance_to_temperature=resistance_to_temperature,
         ),
     )
 
 
 if __name__ == "__main__":
-    main()
+    pass
+    # main()
