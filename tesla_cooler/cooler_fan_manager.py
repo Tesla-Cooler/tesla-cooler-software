@@ -27,9 +27,9 @@ def set_fan_to_duty(pwm_pin: PWM, duty: int, min_cold_start_duty: int) -> None:
 
     current_fan_duty = pwm_pin.duty_u16()
 
-    if current_fan_duty == 0 and duty < min_cold_start_duty:
+    if all([current_fan_duty == 0, duty != 0, duty < min_cold_start_duty]):
         pwm_pin.duty_u16(min_cold_start_duty)
-        utime.sleep(1)
+        utime.sleep(0.1)
         # Fan should now be spinning and can reach lower RPMs without stalling.
 
     pwm_pin.duty_u16(duty)

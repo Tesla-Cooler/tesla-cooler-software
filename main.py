@@ -4,9 +4,17 @@ Main module, gets run on boot by the pico.
 
 import _thread
 
+import utime
+from machine import PWM, Pin
+from utime import sleep
+
 from tesla_cooler import thermistor
 from tesla_cooler.cooler_fan_manager import CoolerFanManager
-from tesla_cooler.fan_constants import GM1204PQV1_8A
+from tesla_cooler.fan_constants import (
+    GM1204PQV1_8A_LONG_WIRE,
+    GM1204PQV1_8A_SHORT_WIRE,
+    FanConstants,
+)
 from tesla_cooler.fan_speed_control import DEFAULT_POWER_MAX, DEFAULT_POWER_MIN
 from tesla_cooler.pcb_constants import (
     COOLER_A_FAN_PINS,
@@ -25,10 +33,12 @@ except ImportError:
 LOG_MSG = "Cooler: {name} is {temperature} degrees C. Setting fans: {duty_cycles}"
 
 # TODO, figure out how well the pico performs here
-DEFAULT_SPEEDS_PER_POWER = 50
+DEFAULT_SPEEDS_PER_POWER = 30
 
 
-def cooler_loop(cooler_name: str, thermistor_pin: int, fan_pins: Tuple[int, ...]) -> None:
+def cooler_loop(
+    cooler_name: str, thermistor_pin: int, fan_pins: Tuple[int, ...], fan_constants: FanConstants
+) -> None:
     """
     Uses a PID control loop to make sure the GPU stays cool.
     This is the main loop of the whole program.
@@ -42,12 +52,12 @@ def cooler_loop(cooler_name: str, thermistor_pin: int, fan_pins: Tuple[int, ...]
     # Note: The internal temp of the card (as reported by `nvidia-smi`) is typically 20 degC
     # lower than the case temperature, so the true target temp here is 60 degrees.
     pid_controller = PID(
-        1, 0.1, 0.05, setpoint=80.0, output_limits=(DEFAULT_POWER_MIN, DEFAULT_POWER_MAX)
+        -20, -20, -20, setpoint=80.0, output_limits=(DEFAULT_POWER_MIN, DEFAULT_POWER_MAX)
     )
 
     cooler_temp_function = thermistor.thermistor_temperature(thermistor_pin)
     cooler_fan_manager = CoolerFanManager(
-        pin_numbers=fan_pins, fan_constants=GM1204PQV1_8A, speeds_per_power=DEFAULT_SPEEDS_PER_POWER
+        pin_numbers=fan_pins, fan_constants=fan_constants, speeds_per_power=DEFAULT_SPEEDS_PER_POWER
     )
 
     cooler_fan_manager.power(new_power=0)
@@ -64,7 +74,7 @@ def control_main() -> None:
     Main entry point for tesla_cooler
     :return: None
     """
-
+    """
     _thread.start_new_thread(
         cooler_loop,
         args=(),
@@ -74,24 +84,30 @@ def control_main() -> None:
             "fan_pins": COOLER_A_FAN_PINS,
         },
     )
+    """
 
-    cooler_loop(cooler_name="B", thermistor_pin=COOLER_B_THERMISTOR, fan_pins=COOLER_B_FAN_PINS)
+    cooler_loop(
+        cooler_name="B",
+        thermistor_pin=COOLER_B_THERMISTOR,
+        fan_pins=COOLER_B_FAN_PINS,
+        fan_constants=GM1204PQV1_8A_LONG_WIRE,
+    )
 
 
 def test_main() -> None:
 
     cooler_a_manager = CoolerFanManager(
-        pin_numbers=COOLER_A_FAN_PINS,
-        fan_constants=GM1204PQV1_8A,
+        pin_numbers=COOLER_B_FAN_PINS,
+        fan_constants=GM1204PQV1_8A_LONG_WIRE,
         speeds_per_power=DEFAULT_SPEEDS_PER_POWER,
     )
 
     while True:
 
-        for power in range(0, 100, 1):
+        for power in range(0, 100, 10):
             new_power = power / 100
-            cooler_a_manager.power(new_power=new_power)
-            print(new_power)
+            print(f"Powers: {cooler_a_manager.power(new_power=new_power)}")
+            utime.sleep(5)
 
 
 if __name__ == "__main__":

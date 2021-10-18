@@ -2,6 +2,7 @@
 Constants related to physical fans
 """
 
+
 try:
     from collections import namedtuple
 except ImportError:
@@ -28,14 +29,27 @@ FanConstants = namedtuple(
 # the Maglev GM1204PQV1-8A. The name of the fan that I'm using in the build is: `Twinkle Bay
 # 40x28mm Cooling Fan, Replacement for Maglev Cooling Fan, 40 x 40 x 28mm with 3 Pin 3 Wire
 # onnector (12V DC, 2.8 W)`.
-GM1204PQV1_8A = FanConstants(
+GM1204PQV1_8A_SHORT_WIRE = FanConstants(
     pwm_freq=30_000,
     duty_ranges=(  # TODO: actually measure these.
-        (1000, 20_000),  # Makes no noise.
-        (20_001, 30_000),
-        (30_001, 40_000),  # Makes some noise.
-        (40_001, 50_000),  # Makes a lot of noise.
-        (50_001, 60_000),  # Makes a lot of noise.
+        (3_000, 4000),  # Slowest spinning speed
+        (4_001, 5_000),
+        (5_001, 10_000),
+        (10_001, 30_000),
+        (30_001, 50_000),
+        (50_001, 60_000),
+        (60_001, MAX_DUTY),
+    ),
+    min_cold_start_duty=7_000,  # TODO: actually measure this
+)
+
+GM1204PQV1_8A_LONG_WIRE = FanConstants(
+    pwm_freq=30_000,
+    duty_ranges=(  # TODO: actually measure these.
+        (19_000, 35_000),  # Slowest spinning speed
+        (35_001, 45_000),
+        (45_001, 50_000),
+        (50_001, 60_000),
         (60_001, MAX_DUTY),
     ),
     min_cold_start_duty=40_000,  # TODO: actually measure this
