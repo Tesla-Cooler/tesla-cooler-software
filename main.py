@@ -59,7 +59,7 @@ def cooler_loop(cooler_name: str, thermistor_pin: int, fan_pins: Tuple[int, ...]
         print(LOG_MSG.format(name=cooler_name, temperature=current_temp, duty_cycles=fan_speeds))
 
 
-def main() -> None:
+def control_main() -> None:
     """
     Main entry point for tesla_cooler
     :return: None
@@ -78,5 +78,21 @@ def main() -> None:
     cooler_loop(cooler_name="B", thermistor_pin=COOLER_B_THERMISTOR, fan_pins=COOLER_B_FAN_PINS)
 
 
+def test_main() -> None:
+
+    cooler_a_manager = CoolerFanManager(
+        pin_numbers=COOLER_A_FAN_PINS,
+        fan_constants=GM1204PQV1_8A,
+        speeds_per_power=DEFAULT_SPEEDS_PER_POWER,
+    )
+
+    while True:
+
+        for power in range(0, 100, 1):
+            new_power = power / 100
+            cooler_a_manager.power(new_power=new_power)
+            print(new_power)
+
+
 if __name__ == "__main__":
-    main()
+    test_main()
