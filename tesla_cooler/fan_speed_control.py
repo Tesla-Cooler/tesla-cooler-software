@@ -2,6 +2,7 @@
 Code for controlling fan speed!
 TODO - more docs
 """
+from tesla_cooler.linear_interpolate import linterp_int
 
 try:
     from typing import Dict, List, Tuple  # pylint: disable=unused-import
@@ -11,7 +12,7 @@ except ImportError:
 
 from tesla_cooler import pure_python_itertools
 
-DEFAULT_POWER_MIN, DEFAULT_POWER_MAX = (0.0, 1.0)
+COOLER_POWER_MIN, COOLER_POWER_MAX = (0.0, 1.0)
 
 
 def _weigh_values(values: "Tuple[int, ...]", range_to_weight: "Dict[Tuple[int, int], int]") -> int:
@@ -40,20 +41,6 @@ def _weigh_values(values: "Tuple[int, ...]", range_to_weight: "Dict[Tuple[int, i
             ],
         )
     )
-
-
-def _linear_interpolate(x: float, in_min: float, in_max: float, out_min: int, out_max: int) -> int:
-    """
-    Works like Arduino's `map`, thanks to this post for the port:
-    https://forum.micropython.org/viewtopic.php?f=2&t=7615
-    :param x: Value to scale.
-    :param in_min: Minimum bound of input.
-    :param in_max: Max bound of input.
-    :param out_min: Minimum output.
-    :param out_max: Maximum output.
-    :return: Scaled value in the space between `out_min` and `out_max`.
-    """
-    return int((x - in_min) * (out_max - out_min) // (in_max - in_min) + out_min)
 
 
 def _combinations_to_sum(  # pylint: disable=unused-argument
@@ -128,13 +115,13 @@ def _ranges_to_stats(output_ranges: "Tuple[Tuple[int, int], ...]") -> "Tuple[int
     return min(all_values), max(all_values)
 
 
-def fan_drive_values(
+def fan_drive_values(  # pylint: disable=too-many-locals
     power: float,
     num_fans: int,
     output_ranges: "Tuple[Tuple[int, int], ...]",
     num_speeds: int,
-    power_min: float = DEFAULT_POWER_MIN,
-    power_max: float = DEFAULT_POWER_MAX,
+    power_min: float = COOLER_POWER_MIN,
+    power_max: float = COOLER_POWER_MAX,
 ) -> "Tuple[int, ...]":
     """
     For a given power (which is by default a float between 0..1), come up with duty cycles for the
@@ -154,11 +141,15 @@ def fan_drive_values(
     """
     min_output, max_output = _ranges_to_stats(output_ranges)
 
+    # Short circuit in this case
+    if power == power_max:
+        return tuple(max_output for _ in range(num_fans))
+
     # The values written to the three fans are trying to spin this quickly.
     # Assumes airflow adds linearly, which we're okay with for our application.
     all_fans_max_output = max_output * num_fans
 
-    target_counts = _linear_interpolate(
+    target_counts = linterp_int(
         x=power,
         in_min=power_min,
         in_max=power_max,
@@ -172,10 +163,23 @@ def fan_drive_values(
     # the number of inputs to make the combinations.
     speeds = tuple(range(min_output, max_output, step))
 
-    # Combinations of fan speeds that add up to `target_counts`.
-    candidate_speeds: "List[Tuple[int, ...]]" = _combinations_to_sum(
-        potential_values=speeds, target_length=num_fans, target_value=target_counts, tolerance=step
-    )
+    # TODO -- need to think of a better way to approach this
+    # Increases the tolerance until we get at least a single set of speed values.
+    for multiplier in range(1, 10):
+
+        # Combinations of fan speeds that add up to `target_counts`.
+        candidate_speeds: "List[Tuple[int, ...]]" = _combinations_to_sum(
+            potential_values=speeds,
+            target_length=num_fans,
+            target_value=target_counts,
+            tolerance=step * multiplier,
+        )
+
+        if len(candidate_speeds) > 0:
+            break
+    else:
+        # Turn fans on full blast if the above compute fails.
+        candidate_speeds = [tuple(max_output for _ in range(num_fans))]
 
     # Each subsequent range is ^3 as expensive to use as the previous one.
     # This encodes the behavior that two fans spinning slowly are better than a single

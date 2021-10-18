@@ -63,3 +63,12 @@ def left_rotate_list(tup: "List[Any, ...]") -> "List[Any, ...]":  # type: ignore
     :return: Rotated tuple.
     """
     return tup[1:] + tup[:1]
+
+
+def float_mean(floats: "List[float]") -> float:
+    """
+    Calculate the average of a list of floats.
+    :param floats: List to get the average value of.
+    :return: Average value.
+    """
+    return sum(floats) / float(len(floats))

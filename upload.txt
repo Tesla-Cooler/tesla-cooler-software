@@ -2,7 +2,7 @@
 # To upload files onto a pico on port `/dev/ttyACM0` run:
 # rshell -p /dev/ttyACM0 --buffer-size 512 -f command.txt
 
-cp ./main.py /pyboard/main.py
 cp ./tesla_cooler/* /pyboard/tesla_cooler
+cp ./main.py /pyboard/main.py
 
-repl ~ from main import control_main ~ control_main()
+repl
