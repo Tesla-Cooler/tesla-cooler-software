@@ -55,7 +55,7 @@ def chain_from_iterable(iterables: Iterable[Iterable[Any]]):  # type: ignore
             yield element
 
 
-def left_rotate_list(tup: List[Any, ...]) -> List[Any, ...]:  # type: ignore
+def left_rotate_list(tup: List[Any]) -> List[Any]:  # type: ignore
     """
     Rotate the items in a tuple to the left one index.
     This isn't in itertools but hey who's keeping track.
