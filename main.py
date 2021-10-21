@@ -43,7 +43,7 @@ def create_cooler_callback(
     fan_constants: FanConstants,
     resistance_to_temperature: Dict[float, float],
     temperature_offset: float,
-    print_activity: bool = True,
+    print_activity: bool = False,
 ) -> Callable[[Timer], None]:
     """
     Creates a function to be called by the timer.
@@ -105,6 +105,8 @@ def create_cooler_callback(
 def main() -> None:
     """
     Main entry point for tesla_cooler.
+    This is very specific to my build, if you're adapting this for another configuration,
+    you're probably going to want to edit this function.
 
     Timers:
         Attaches the two cooler control loops to timers so they can run in parallel.
@@ -140,7 +142,7 @@ def main() -> None:
             fan_pins=COOLER_B_FAN_PINS,
             fan_constants=GM1204PQV1_8A_LONG_WIRE,
             resistance_to_temperature=resistance_to_temperature,
-            temperature_offset=15,  # determined experimentally
+            temperature_offset=30,  # determined experimentally
         ),
     )
 
@@ -148,5 +150,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    # main()
-    pass
+    main()

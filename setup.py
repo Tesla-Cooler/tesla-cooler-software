@@ -16,7 +16,7 @@ def prod_dependencies() -> List[str]:
 
 setup(
     name="tesla_cooler",
-    version="1.0.0",
+    version="0.2.0",
     description="Firmware for a Raspberry Pi Pico to drive fans and cool NVidia Tesla compute GPUs.",
     author="Devon Bray",
     author_email="dev@esologic.com",

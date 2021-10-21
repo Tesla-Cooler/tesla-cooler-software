@@ -96,3 +96,17 @@ def thermistor_temperature(pin_number: int, resistance_to_temperature: Dict[floa
             _thermistor_resistance(pin=ADC(pin_number)), list(resistance_to_temperature.keys())
         )
     ]
+
+
+def read_thermistor_temp_one_shot(thermistor_pin_number: int) -> float:
+    """
+    Read mapping from disk, and consume it to get the current temperature of the attached
+    thermistor.
+    Note: this is inefficient because you throw away the mapping dict after use.
+    :param thermistor_pin_number: Pin associated w/ thermistor.
+    :return: Current temperature in degrees.
+    """
+
+    return thermistor_temperature(
+        pin_number=thermistor_pin_number, resistance_to_temperature=read_resistance_to_temperature()
+    )
