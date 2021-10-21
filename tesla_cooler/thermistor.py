@@ -48,8 +48,8 @@ def _thermistor_resistance(
 
 
 def _closest_to_value(
-    value: float, list_of_values: "Union[Sequence[int], Sequence[float]]"
-) -> "Union[int, float]":
+    value: float, list_of_values: Union[Sequence[int], Sequence[float]]
+) -> Union[int, float]:
     """
     Given a value, and a list of values, find the closest value in the list to the input.
     :param value: Value to find in list.
@@ -63,7 +63,7 @@ def _closest_to_value(
 
 def read_resistance_to_temperature(
     lookup_json_path: str = DEFAULT_JSON_PATH,
-) -> "Dict[float, float]":
+) -> Dict[float, float]:
     """
     Reads a local json file that contains a series of keys mapping temperature to resistance.
     :param lookup_json_path: Path to the json file.
@@ -71,10 +71,10 @@ def read_resistance_to_temperature(
     """
 
     with open(lookup_json_path) as f:
-        lookup_dict: "Dict[str, str]" = json.load(f)
+        lookup_dict: Dict[str, str] = json.load(f)
 
         # Need to multiply by 1000 because file is in kOhm
-        resistance_to_temperature: "Dict[float, float]" = {
+        resistance_to_temperature: Dict[float, float] = {
             float(resistance_str) * 1000: float(temperature_str)
             for temperature_str, resistance_str in lookup_dict.items()
         }
@@ -83,7 +83,7 @@ def read_resistance_to_temperature(
 
 
 def thermistor_temperature(
-    pin_number: int, resistance_to_temperature: "Dict[float, float]"
+    pin_number: int, resistance_to_temperature: Dict[float, float]
 ) -> float:
     """
     Read the temperature off of a thermistor attached the given pin.

@@ -12,8 +12,8 @@ except ImportError:
 
 
 def combinations_with_replacement(  # type: ignore
-    iterable: "Iterable[Any]", r: int
-) -> "Iterable[Tuple[Any]]":
+    iterable: Iterable[Any], r: int
+) -> Iterable[Tuple[Any]]:
     """
     Return r length subsequences of elements from the input iterable allowing individual elements
     to be repeated more than once.
@@ -44,7 +44,7 @@ def combinations_with_replacement(  # type: ignore
         yield tuple(pool[i] for i in indices)  # type: ignore
 
 
-def chain_from_iterable(iterables: "Iterable[Iterable[Any]]"):  # type: ignore
+def chain_from_iterable(iterables: Iterable[Iterable[Any]]):  # type: ignore
     """
     Gets chained inputs from a single iterable argument that is evaluated lazily.
     :param iterables: Iterable of Iterables to combine.
@@ -55,7 +55,7 @@ def chain_from_iterable(iterables: "Iterable[Iterable[Any]]"):  # type: ignore
             yield element
 
 
-def left_rotate_list(tup: "List[Any, ...]") -> "List[Any, ...]":  # type: ignore
+def left_rotate_list(tup: List[Any, ...]) -> List[Any, ...]:  # type: ignore
     """
     Rotate the items in a tuple to the left one index.
     This isn't in itertools but hey who's keeping track.
@@ -65,7 +65,7 @@ def left_rotate_list(tup: "List[Any, ...]") -> "List[Any, ...]":  # type: ignore
     return tup[1:] + tup[:1]
 
 
-def float_mean(floats: "List[float]") -> float:
+def float_mean(floats: List[float]) -> float:
     """
     Calculate the average of a list of floats.
     :param floats: List to get the average value of.

@@ -5,4 +5,4 @@
 cp ./tesla_cooler/* /pyboard/tesla_cooler
 cp ./main.py /pyboard/main.py
 
-repl
+repl ~ from main import main ~ main()

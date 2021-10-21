@@ -12,8 +12,8 @@ except ImportError:
 
 
 def _clamp(
-    x: "Union[int, float]", out_min: "Union[int, float]", out_max: "Union[int, float]"
-) -> "Union[int, float]":
+    x: Union[int, float], out_min: Union[int, float], out_max: Union[int, float]
+) -> Union[int, float]:
     """
     Truncates x to the given bounds.
     :param x: Value to truncate.

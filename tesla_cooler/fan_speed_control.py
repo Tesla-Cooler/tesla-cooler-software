@@ -15,7 +15,7 @@ from tesla_cooler import pure_python_itertools
 COOLER_POWER_MIN, COOLER_POWER_MAX = (0.0, 1.0)
 
 
-def _weigh_values(values: "Tuple[int, ...]", range_to_weight: "Dict[Tuple[int, int], int]") -> int:
+def _weigh_values(values: Tuple[int, ...], range_to_weight: Dict[Tuple[int, int], int]) -> int:
     """
     For each of the values in `values`, look up it's weight in `range_to_weight`, the return
     the cumulative sum of all of weights in `values`.
@@ -44,8 +44,8 @@ def _weigh_values(values: "Tuple[int, ...]", range_to_weight: "Dict[Tuple[int, i
 
 
 def _combinations_to_sum(  # pylint: disable=unused-argument
-    potential_values: "Tuple[int, ...]", target_length: int, target_value: int, tolerance: int
-) -> "List[Tuple[int, ...]]":
+    potential_values: Tuple[int, ...], target_length: int, target_value: int, tolerance: int
+) -> List[Tuple[int, ...]]:
     """
     Finds unique combinations of `potential_values` that are of length `target_length` and sum to
     `target_value`. Combinations that are +/- `tolerance` away from `target_value` are also
@@ -72,7 +72,7 @@ def _combinations_to_sum(  # pylint: disable=unused-argument
 
     pad = tuple((0 for _ in range(target_length)))
 
-    def pad_to_target_length(tup: "Tuple[int, ...]") -> "Tuple[int, ...]":
+    def pad_to_target_length(tup: Tuple[int, ...]) -> Tuple[int, ...]:
         """
         If the input tuple is less than the target length, add zeros to the tuple until it
         reaches the length.
@@ -105,7 +105,7 @@ def _combinations_to_sum(  # pylint: disable=unused-argument
     return list(set(sorted_valid))
 
 
-def _ranges_to_stats(output_ranges: "Tuple[Tuple[int, int], ...]") -> "Tuple[int, int]":
+def _ranges_to_stats(output_ranges: Tuple[Tuple[int, int], ...]) -> Tuple[int, int]:
     """
     Compute some statistics about the output ranges.
     :param output_ranges: Ranges to find stats for.
@@ -118,11 +118,11 @@ def _ranges_to_stats(output_ranges: "Tuple[Tuple[int, int], ...]") -> "Tuple[int
 def fan_drive_values(  # pylint: disable=too-many-locals
     power: float,
     num_fans: int,
-    output_ranges: "Tuple[Tuple[int, int], ...]",
+    output_ranges: Tuple[Tuple[int, int], ...],
     num_speeds: int,
     power_min: float = COOLER_POWER_MIN,
     power_max: float = COOLER_POWER_MAX,
-) -> "Tuple[int, ...]":
+) -> Tuple[int, Tuple[int, ...]]:
     """
     For a given power (which is by default a float between 0..1), come up with duty cycles for the
     fans that blow at the required power but do it as quietly as possible. The power is converted
@@ -143,7 +143,7 @@ def fan_drive_values(  # pylint: disable=too-many-locals
 
     # Short circuit in this case
     if power == power_max:
-        return tuple(max_output for _ in range(num_fans))
+        return max_output * num_fans, tuple(max_output for _ in range(num_fans))
 
     # The values written to the three fans are trying to spin this quickly.
     # Assumes airflow adds linearly, which we're okay with for our application.
@@ -168,7 +168,7 @@ def fan_drive_values(  # pylint: disable=too-many-locals
     for multiplier in range(1, 10):
 
         # Combinations of fan speeds that add up to `target_counts`.
-        candidate_speeds: "List[Tuple[int, ...]]" = _combinations_to_sum(
+        candidate_speeds: List[Tuple[int, ...]] = _combinations_to_sum(
             potential_values=speeds,
             target_length=num_fans,
             target_value=target_counts,
@@ -194,4 +194,4 @@ def fan_drive_values(  # pylint: disable=too-many-locals
     ]
 
     # Lowest weight here will be the slowest speed ie. the quietest.
-    return min(weights_and_speeds, key=lambda ws: ws[0])[1]
+    return target_counts, min(weights_and_speeds, key=lambda ws: ws[0])[1]

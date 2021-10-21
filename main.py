@@ -27,13 +27,13 @@ except ImportError:
 
 LOG_MSG = (
     "Cooler: {name} is {temperature} degrees C. "
-    "Cooler Power: {power}, Setting fans: {duty_cycles}"
+    "Cooler Power: {power}, Target Counts: {target_counts}, Setting fans: {duty_cycles}"
 )
 
-DEFAULT_SPEEDS_PER_POWER = 35
+DEFAULT_SPEEDS_PER_POWER = 30
 
 # How often the cooler control loops will run.
-DEFAULT_COOLER_UPDATE_MS = 2500
+DEFAULT_COOLER_UPDATE_MS = 5000
 
 
 def create_cooler_callback(
@@ -42,7 +42,7 @@ def create_cooler_callback(
     fan_pins: Tuple[int, ...],
     fan_constants: FanConstants,
     resistance_to_temperature: Dict[float, float],
-    print_activity: bool = False,
+    print_activity: bool = True,
 ) -> Callable[[Timer], None]:
     """
     Creates a function to be called by the timer.
@@ -74,12 +74,14 @@ def create_cooler_callback(
         :return: None
         """
 
-        current_gpu_temperature = thermistor.thermistor_temperature(
+        thermistor_temperature = thermistor.thermistor_temperature(
             pin_number=thermistor_pin, resistance_to_temperature=resistance_to_temperature
         )
 
-        cooler_power = gpu_temperature_to_cooler_power(current_temperature=current_gpu_temperature)
-        fan_speeds = cooler_fan_manager.power(cooler_power)
+        current_gpu_temperature = thermistor_temperature + 20
+
+        cooler_power = gpu_temperature_to_cooler_power(gpu_temperature=current_gpu_temperature)
+        target_counts, fan_speeds = cooler_fan_manager.power(cooler_power)
 
         if print_activity:
             print(
@@ -87,6 +89,7 @@ def create_cooler_callback(
                     name=cooler_name,
                     temperature=current_gpu_temperature,
                     power=cooler_power,
+                    target_counts=target_counts,
                     duty_cycles=fan_speeds,
                 )
             )
@@ -132,7 +135,9 @@ def main() -> None:
         ),
     )
 
+    print("Timers configured!")
+
 
 if __name__ == "__main__":
-    pass
     # main()
+    pass

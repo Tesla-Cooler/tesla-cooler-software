@@ -4,11 +4,10 @@ TODO: add more docs here
 """
 
 import utime
-from machine import PWM, Pin
+from machine import PWM, Pin, Timer
 
 from tesla_cooler.fan_constants import FanConstants
 from tesla_cooler.fan_speed_control import fan_drive_values
-from tesla_cooler.pure_python_itertools import left_rotate_list
 
 try:
     from typing import Callable, Dict, List, Sequence, Tuple  # pylint: disable=unused-import
@@ -29,7 +28,7 @@ def set_fan_to_duty(pwm_pin: PWM, duty: int, min_cold_start_duty: int) -> None:
 
     if all([current_fan_duty == 0, duty != 0, duty < min_cold_start_duty]):
         pwm_pin.duty_u16(min_cold_start_duty)
-        utime.sleep(0.25)
+        utime.sleep(1)
         # Fan should now be spinning and can reach lower RPMs without stalling.
 
     pwm_pin.duty_u16(duty)
@@ -41,11 +40,12 @@ class CoolerFanManager:
 
     Goals are:
     * To have each of the individual fans spinning as slow as possible, three fans spinning slowly
-    is better than two fans spinning quickly.
-    * Whenever fewer than all fans are operating, expose a way to rotate which of the
-    fans are on to prevent uneven wear between the fans over time.
+    is better than two fans spinning quickly. Implemented.
     * When asking stopped fans to spin below the speed they can start and get to, make sure they
-    first spin up to a speed where they can then spin down to the target speed.
+    first spin up to a speed where they can then spin down to the target speed. Implemented.
+    * Whenever fewer than all fans are operating, expose a way to rotate which of the
+    fans are on to prevent uneven wear between the fans over time. TODO -- hard to get this to
+    work alongside timers.
 
     Assumptions:
     * All of the attached fans are the same model, and all cost the same to drive.
@@ -53,7 +53,7 @@ class CoolerFanManager:
 
     def __init__(
         self: "CoolerFanManager",
-        pin_numbers: "Tuple[int, ...]",
+        pin_numbers: Tuple[int, ...],
         fan_constants: FanConstants,
         speeds_per_power: int,
     ):
@@ -74,11 +74,11 @@ class CoolerFanManager:
             pwm.freq(fan_constants.pwm_freq)
             return pwm
 
-        self._pwm_controllers: "List[PWM]" = [setup_pwm(pin_number) for pin_number in pin_numbers]
+        self._pwm_controllers: List[PWM] = [setup_pwm(pin_number) for pin_number in pin_numbers]
         self._fan_constants = fan_constants
         self._speeds_per_power = speeds_per_power
 
-    def power(self: "CoolerFanManager", new_power: float) -> "Tuple[int, ...]":
+    def power(self: "CoolerFanManager", new_power: float) -> Tuple[int, Tuple[int, ...]]:
         """
         Set the attached fans to the given power. Logic under the hood decides how that actually
         translates to rotational speed of each of the fans, see `fan_drive_values` for more
@@ -89,7 +89,7 @@ class CoolerFanManager:
         """
 
         # This resulting tuple is going to be sorted fastest speed to slowest speed.
-        speeds = fan_drive_values(
+        target_counts, speeds = fan_drive_values(
             power=new_power,
             num_fans=len(self._pwm_controllers),
             output_ranges=self._fan_constants.duty_ranges,
@@ -103,12 +103,4 @@ class CoolerFanManager:
                 min_cold_start_duty=self._fan_constants.min_cold_start_duty,
             )
 
-        return speeds
-
-    def rotate_active(self: "CoolerFanManager") -> None:
-        """
-        Rotating the order of the objects in memory does the trick as speeds are always written
-        in order of fastest speed first.
-        :return: None
-        """
-        self._pwm_controllers = list(left_rotate_list(self._pwm_controllers))
+        return target_counts, speeds

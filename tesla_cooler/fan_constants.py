@@ -28,7 +28,7 @@ FanConstants = namedtuple(
 # I got mine off of amazon, in the description it says that is a replacement for
 # the Maglev GM1204PQV1-8A. The name of the fan that I'm using in the build is: `Twinkle Bay
 # 40x28mm Cooling Fan, Replacement for Maglev Cooling Fan, 40 x 40 x 28mm with 3 Pin 3 Wire
-# onnector (12V DC, 2.8 W)`.
+# Connector (12V DC, 2.8 W)`.
 GM1204PQV1_8A_SHORT_WIRE = FanConstants(
     pwm_freq=30_000,
     duty_ranges=(
@@ -43,6 +43,7 @@ GM1204PQV1_8A_SHORT_WIRE = FanConstants(
     min_cold_start_duty=8_000,
 )
 
+# TODO add note in readme and here about distinction between these two
 GM1204PQV1_8A_LONG_WIRE = FanConstants(
     pwm_freq=30_000,
     duty_ranges=(  # TODO: actually measure these.
