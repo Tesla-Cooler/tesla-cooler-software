@@ -26,7 +26,7 @@ except ImportError:
 
 
 LOG_MSG = (
-    "Cooler: {name} is {temperature} degrees C. "
+    "Cooler (thermistor, calc): {name} is {temperature} degrees C. "
     "Cooler Power: {power}, Target Counts: {target_counts}, Setting fans: {duty_cycles}"
 )
 
@@ -42,6 +42,7 @@ def create_cooler_callback(
     fan_pins: Tuple[int, ...],
     fan_constants: FanConstants,
     resistance_to_temperature: Dict[float, float],
+    temperature_offset: float,
     print_activity: bool = True,
 ) -> Callable[[Timer], None]:
     """
@@ -53,6 +54,10 @@ def create_cooler_callback(
     docs in the type for more.
     :param resistance_to_temperature: A dictionary mapping electrical resistance to the
     corresponding temperature of a resistor. Used to figure out what temperature the GPU is.
+    :param temperature_offset: The difference between the temperature of the thermistor, and the
+    temperature of the GPU. Since the thermistor is attached to the outside of the GPU, it will
+    always have slightly different temperature than that measured by `nvidia-smi`.
+    TODO: This assumes the relationship is linear which it probably isn't.
     :param print_activity: If True, each time the timer runs a log will be printed to the console.
     Makes it hard to work in a repl alongside operation but good for debugging otherwise.
     :return: None
@@ -78,7 +83,7 @@ def create_cooler_callback(
             pin_number=thermistor_pin, resistance_to_temperature=resistance_to_temperature
         )
 
-        current_gpu_temperature = thermistor_temperature + 20
+        current_gpu_temperature = thermistor_temperature + temperature_offset
 
         cooler_power = gpu_temperature_to_cooler_power(gpu_temperature=current_gpu_temperature)
         target_counts, fan_speeds = cooler_fan_manager.power(cooler_power)
@@ -87,7 +92,7 @@ def create_cooler_callback(
             print(
                 LOG_MSG.format(
                     name=cooler_name,
-                    temperature=current_gpu_temperature,
+                    temperature=(thermistor_temperature, current_gpu_temperature),
                     power=cooler_power,
                     target_counts=target_counts,
                     duty_cycles=fan_speeds,
@@ -111,6 +116,7 @@ def main() -> None:
 
     resistance_to_temperature = thermistor.read_resistance_to_temperature()
 
+    # "Hot side" GPU -- The underside of the card is right up against the other GPU
     Timer().init(
         period=DEFAULT_COOLER_UPDATE_MS,
         mode=Timer.PERIODIC,
@@ -120,9 +126,11 @@ def main() -> None:
             fan_pins=COOLER_A_FAN_PINS,
             fan_constants=GM1204PQV1_8A_SHORT_WIRE,
             resistance_to_temperature=resistance_to_temperature,
+            temperature_offset=5,  # determined experimentally
         ),
     )
 
+    # "Cool side" GPU -- The underside of the card faces the motherboard and has plenty of room.
     Timer().init(
         period=DEFAULT_COOLER_UPDATE_MS,
         mode=Timer.PERIODIC,
@@ -132,6 +140,7 @@ def main() -> None:
             fan_pins=COOLER_B_FAN_PINS,
             fan_constants=GM1204PQV1_8A_LONG_WIRE,
             resistance_to_temperature=resistance_to_temperature,
+            temperature_offset=15,  # determined experimentally
         ),
     )
 

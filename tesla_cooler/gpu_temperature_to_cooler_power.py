@@ -25,18 +25,18 @@ def gpu_temperature_to_cooler_power(
 
     if gpu_temperature < 40:
         return cooler_power_min
-    elif 40 <= gpu_temperature < 60:
+    elif 40 <= gpu_temperature < 70:
         return linear_interpolate.linterp_float(
             x=gpu_temperature,
             in_min=40,
-            in_max=60,
+            in_max=70,
             out_min=cooler_power_min,
             out_max=cooler_power_max / 3,
         )
-    elif 60 <= gpu_temperature < 100:
+    elif 70 <= gpu_temperature < 100:
         return linear_interpolate.linterp_float(
             x=gpu_temperature,
-            in_min=60,
+            in_min=70,
             in_max=100,
             out_min=cooler_power_max / 3,
             out_max=cooler_power_max,

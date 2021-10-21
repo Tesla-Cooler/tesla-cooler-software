@@ -4,7 +4,7 @@ TODO: add more docs here
 """
 
 import utime
-from machine import PWM, Pin, Timer
+from machine import PWM, Pin
 
 from tesla_cooler.fan_constants import FanConstants
 from tesla_cooler.fan_speed_control import fan_drive_values
@@ -34,7 +34,7 @@ def set_fan_to_duty(pwm_pin: PWM, duty: int, min_cold_start_duty: int) -> None:
     pwm_pin.duty_u16(duty)
 
 
-class CoolerFanManager:
+class CoolerFanManager:  # pylint: disable=too-few-public-methods
     """
     Manages a single cooler's group of fans.
 

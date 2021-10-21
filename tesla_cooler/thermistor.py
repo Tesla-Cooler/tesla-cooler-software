@@ -82,9 +82,7 @@ def read_resistance_to_temperature(
     return resistance_to_temperature
 
 
-def thermistor_temperature(
-    pin_number: int, resistance_to_temperature: Dict[float, float]
-) -> float:
+def thermistor_temperature(pin_number: int, resistance_to_temperature: Dict[float, float]) -> float:
     """
     Read the temperature off of a thermistor attached the given pin.
     :param pin_number: The pin connected to the thermistor.

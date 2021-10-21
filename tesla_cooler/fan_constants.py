@@ -21,6 +21,8 @@ FanConstants = namedtuple(
         # When this duty cycle is applied, the fan transitions from not moving at all, to it's
         # slowest possible speed.
         "min_cold_start_duty",
+        # The minimum value that the fans will actually still rotate. Not currently used.
+        "min_duty",
     ],
 )
 
@@ -32,7 +34,6 @@ FanConstants = namedtuple(
 GM1204PQV1_8A_SHORT_WIRE = FanConstants(
     pwm_freq=30_000,
     duty_ranges=(
-        (3_000, 4000),  # Slowest spinning speed
         (4_001, 5_000),
         (5_001, 10_000),
         (10_001, 30_000),
@@ -41,6 +42,7 @@ GM1204PQV1_8A_SHORT_WIRE = FanConstants(
         (60_001, MAX_DUTY),
     ),
     min_cold_start_duty=8_000,
+    min_duty=3_000,
 )
 
 # TODO add note in readme and here about distinction between these two
@@ -54,4 +56,5 @@ GM1204PQV1_8A_LONG_WIRE = FanConstants(
         (60_001, MAX_DUTY),
     ),
     min_cold_start_duty=40_000,
+    min_duty=19_000,
 )
