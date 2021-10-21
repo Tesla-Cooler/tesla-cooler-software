@@ -8,20 +8,27 @@ import json
 
 from machine import ADC
 
-from tesla_cooler.cooler_common import U_16_MAX, closest_to_value
-
 try:
-    from typing import Callable, Dict, List  # pylint: disable=unused-import
+    from typing import Callable, Dict, List, Sequence, Union  # pylint: disable=unused-import
 except ImportError:
     pass  # we're probably on the pico if this occurs.
 
-RESISTANCE_OF_PULLDOWN = 10_000
+from tesla_cooler.pure_python_itertools import float_mean
 
-DEFAULT_JSON_PATH = "./tesla_cooler/temperature_lookup.json"
+RESISTANCE_OF_PULLDOWN = 10_000
+U_16_MAX = 65535
+
+# Determined experimentally
+DEFAULT_THERMISTOR_SAMPLES = 10
+
+DEFAULT_JSON_PATH = "./tesla_cooler/10K_3950_NTC_temperature_lookup.json"
 
 
 def _thermistor_resistance(
-    pin: ADC, pulldown_resistance: int = RESISTANCE_OF_PULLDOWN, vin_count: int = U_16_MAX
+    pin: ADC,
+    pulldown_resistance: int = RESISTANCE_OF_PULLDOWN,
+    vin_count: int = U_16_MAX,
+    samples: int = DEFAULT_THERMISTOR_SAMPLES,
 ) -> float:
     """
     Compute the resistance of the thermistor at the given PIN.
@@ -29,39 +36,77 @@ def _thermistor_resistance(
     :param pulldown_resistance: The value of the pulldown resistor in ohms.
     :param vin_count: The ADC count (in the u16 number space) for V_in, the max value that could
     be read from the ADC.
+    :param samples: The number of samples to take to average for the measurement.
     :return: The resistance in Ohms as a float.
     """
-    return float((pulldown_resistance * (vin_count / pin.read_u16())) - pulldown_resistance)
+    return float_mean(
+        [
+            float((pulldown_resistance * (vin_count / pin.read_u16())) - pulldown_resistance)
+            for _ in range(samples)
+        ]
+    )
 
 
-def thermistor_temperature(
-    pin_number: int, lookup_json_path: str = DEFAULT_JSON_PATH
-) -> "Callable[[], float]":
+def _closest_to_value(
+    value: float, list_of_values: Union[Sequence[int], Sequence[float]]
+) -> Union[int, float]:
     """
-    Create a function to read the temperature off of a thermistor attached the given pin.
-    :param pin_number: The pin connected to the thermistor.
-    :param lookup_json_path: Path to the json file that maps temperature to resistance.
-    :return: A function that when called returns the current temperature of the thermistor.
+    Given a value, and a list of values, find the closest value in the list to the input.
+    :param value: Value to find in list.
+    :param list_of_values: Candidate output values.
+    :return: The value closest to `value` in `list_of_values`.
     """
+    return list_of_values[
+        min(range(len(list_of_values)), key=lambda i: abs(list_of_values[i] - value))
+    ]
 
-    pin = ADC(pin_number)
+
+def read_resistance_to_temperature(
+    lookup_json_path: str = DEFAULT_JSON_PATH,
+) -> Dict[float, float]:
+    """
+    Reads a local json file that contains a series of keys mapping temperature to resistance.
+    :param lookup_json_path: Path to the json file.
+    :return: The mapping as a dict.
+    """
 
     with open(lookup_json_path) as f:
-        lookup_dict: "Dict[str, str]" = json.load(f)
+        lookup_dict: Dict[str, str] = json.load(f)
 
         # Need to multiply by 1000 because file is in kOhm
-        resistance_to_temperature: "Dict[float, float]" = {
+        resistance_to_temperature: Dict[float, float] = {
             float(resistance_str) * 1000: float(temperature_str)
             for temperature_str, resistance_str in lookup_dict.items()
         }
 
-    resistances = list(resistance_to_temperature.keys())
+    return resistance_to_temperature
 
-    def current_temperature() -> float:
-        """
-        :return: The current temperature detected by the attached resistor in degrees centigrade.
-        """
-        current_resistance = _thermistor_resistance(pin=pin)
-        return resistance_to_temperature[closest_to_value(current_resistance, resistances)]
 
-    return current_temperature
+def thermistor_temperature(pin_number: int, resistance_to_temperature: Dict[float, float]) -> float:
+    """
+    Read the temperature off of a thermistor attached the given pin.
+    :param pin_number: The pin connected to the thermistor.
+    :param resistance_to_temperature: A dict mapping resistance values to their corresponding
+    temperature. Units are ohms and degrees Celsius.
+    :return: A function that when called returns the current temperature of the thermistor.
+    """
+
+    return resistance_to_temperature[
+        _closest_to_value(
+            _thermistor_resistance(pin=ADC(pin_number)), list(resistance_to_temperature.keys())
+        )
+    ]
+
+
+def read_thermistor_temp_one_shot(thermistor_pin_number: int) -> float:
+    """
+    Read mapping from disk, and consume it to get the current temperature of the attached
+    thermistor.
+    Note: this is inefficient because you throw away the mapping dict after use.
+    :param thermistor_pin_number: Pin associated w/ thermistor.
+    :return: Current temperature in degrees.
+    """
+
+    return thermistor_temperature(
+        pin_number=thermistor_pin_number, resistance_to_temperature=read_resistance_to_temperature()
+    )
