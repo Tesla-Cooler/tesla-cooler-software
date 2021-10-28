@@ -1,25 +1,20 @@
-# Tesla Cooler - tesla_cooler 
+# Tesla Cooler (Software) - `tesla_cooler` 
 
-Firmware for a Raspberry Pi Pico to drive fans and cool NVidia Tesla compute GPUs.
+![](./image.jpg)
+
+Firmware for the Raspberry Pi Pico to drive fans and cool NVIDIA Tesla compute GPUs.
+
+See: [esologic.com/tesla-cooler](https://www.esologic.com/tesla-cooler)
 
 ## Usage
 
-####  Environment variables
-
-Add if needed
-
-#### Correct usage
-
-With the virtual env activated, run: 
+With the virtual env activated, and your Pico at port `/dev/ttyACM0` run: 
 
 ```
-python tesla_cooler.py --fill-me-in
+rshell -p /dev/ttyACM0 --buffer-size 512 -f command.txt
 ```
 
-#### Incorrect usage
-
-Add if needed
-
+This will upload the library files only to the pico.
 
 ## Getting Started
 
@@ -41,6 +36,18 @@ There's also a bin script to do this:
 ./tools/create_venv.sh
 ```
 
+### `micropy-cli` usage
+
+The `micropy.json` file describes the MicroPython version that this firmware is designed to run on.
+with the virtual environment activated, run:
+
+```
+micropy
+```
+
+And stubs required to make development easier will be installed in a local `.micropy` directory.
+
+Read more about `micropy-cli` [here](https://github.com/BradenM/micropy-cli).
 
 ## Developer Guide
 
@@ -122,4 +129,3 @@ can run:
 ```
 pre-commit run --all-files
 ```
-
