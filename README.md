@@ -11,7 +11,7 @@ See: [esologic.com/tesla-cooler](https://www.esologic.com/tesla-cooler)
 With the virtual env activated, and your Pico at port `/dev/ttyACM0` run: 
 
 ```
-rshell -p /dev/ttyACM0 --buffer-size 512 -f command.txt
+rshell -p /dev/ttyACM0 --buffer-size 512 -f upload.txt
 ```
 
 This will upload the library files only to the pico.
