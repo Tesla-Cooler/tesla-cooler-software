@@ -8,13 +8,9 @@ Adapted from a post by `danjperrorn` on the micropython forum:
 
 
 import rp2
-import utime
+import uasyncio
 from machine import Pin, mem32
 from rp2 import PIO, asm_pio
-
-SIO_BASE_ADDRESS = 0xD0000000
-PIO_BASE_ADDRESSES = (0x50200000, 0x50300000)
-FSTAT_MASK = 0x4
 
 try:
     import typing as t  # pylint: disable=unused-import
@@ -23,7 +19,7 @@ except ImportError:
 
 
 @asm_pio()
-def pulse_length_pio() -> None:  # pylint: disable=all  # type: ignore
+def pulse_length_pio() -> None:  # pylint: disable=all
     """
     PIO program to read pulse length.
 
@@ -34,19 +30,48 @@ def pulse_length_pio() -> None:  # pylint: disable=all  # type: ignore
     :return: None
     """
 
+    # Set the pin as an input
     set(pindirs, 0)  # type: ignore
+
+    wrap_target()  # type: ignore
+
+    # Wait for the CPU to send us a byte. This is how we're signaled to start looking for
+    # Pulses.
+    pull(block)  # type: ignore
+
+    # Set the x scratch register to 0
     set(x, 0)  # type: ignore
-    mov(osr, x)  # type: ignore
+
+    # Wait for the input pin to go low, then to go high.
     wait(0, pin, 0)  # type: ignore
     wait(1, pin, 0)  # type: ignore
-    label("loop1")  # type: ignore
-    jmp(x_dec, "loop2")  # type: ignore
-    label("loop2")  # type: ignore
-    jmp(pin, "loop1")  # type: ignore
+
+    label("wait_for_low")  # type: ignore
+
+    # Decrease the value of x by a single count.
+    # If this value is non-zero, go to the loop 2 label.
+    # If this value is zero, do nothing.
+    jmp(x_dec, "x_decremented")  # type: ignore
+    label("x_decremented")  # type: ignore
+
+    # If the pin is still high, loop back around to loop1
+    # This means we'll keep counting down x until the pin goes low.
+    # Once the pin goes low, we'll move onto the next instruction.
+    jmp(pin, "wait_for_low")  # type: ignore
+
+    # The pin has gone low, and x represents how many clock cycles it took to complete.
+    # Push the current value of x onto the input shift register.
+    # The input shift register is connected to the RX FIFO, so this value will be transferred
+    # out from the state machine to the CPU.
     mov(isr, x)  # type: ignore
+
+    # Push the contents of the contents of the ISR into the RX FIFO
     push()  # type: ignore
-    label("done")  # type: ignore
-    jmp("done")  # type: ignore
+
+    # Signal the CPU that we've read a pulse.
+    irq(block)  # type: ignore
+
+    wrap()  # type: ignore
 
 
 def measure_pulse_duration(
@@ -62,51 +87,32 @@ def measure_pulse_duration(
     :return: Callable that returns the pulse duration in microseconds.
     """
 
-    cpu_id = mem32[SIO_BASE_ADDRESS]
-    fifo_stat_address = PIO_BASE_ADDRESSES[cpu_id] | FSTAT_MASK
+    lock = uasyncio.Lock()
+    lock.acquire()
+
     state_machine = rp2.StateMachine(state_machine_index)
+    state_machine.init(pulse_length_pio, freq=10000000, in_base=data_pin)
+    state_machine.irq(handler=lambda pio: lock.release())
 
-    def is_fifo_rx_empty() -> bool:
-        """
-        Checks to see if the PIO program has finished.
-        :return: True if the data is ready to be read, False if otherwise.
-        """
+    state_machine.active(1)
 
-        # Shouldn't we be able to do this check with an interrupt/callback rather than having to
-        # poll the address directly?
-        current_fifo_stat = mem32[fifo_stat_address]
-
-        if state_machine_index == 0:
-            output = (current_fifo_stat >> 8) & 1
-        elif state_machine_index == 1:
-            output = (current_fifo_stat >> 9) & 1
-        elif state_machine_index == 2:
-            output = (current_fifo_stat >> 10) & 1
-        else:
-            output = (current_fifo_stat >> 11) & 1
-
-        return bool(output)
-
-    def measure(timeout_us: int = 10000) -> "t.Optional[int]":
+    def measure(timeout_us: int = 10000) -> "t.Optional[int]":  # pylint: disable=unused-argument
         """
         Output Callable.
+        TODO: Implement timeout
         :param timeout_us: If a pulse doesn't occur within this amount of time, `None` will be
         returned.
         :return: The pulse duration if a pulse occurs, `None` if otherwise.
         """
 
-        state_machine.init(pulse_length_pio, freq=10000000, in_base=data_pin, jmp_pin=data_pin)
-        state_machine.put(0x100)
-        state_machine.active(1)
+        # Push a single byte into the StateMachine's fifo, to signal it to read a waveform.
+        state_machine.put(0x0)
 
-        start = utime.ticks_us()
+        # Only the interrupt at the end of the pio program can unlock this lock, so we'll
+        # wait around until it's ready.
+        lock.acquire()
 
-        while True:
-            if (utime.ticks_us() - start) > timeout_us:
-                return None
-            level = is_fifo_rx_empty()
-            if level == 0:
-                return int((3 + (0xFFFFFFFF - state_machine.get())) // 5)
+        return int((3 + (0xFFFFFFFF - state_machine.get())) // 5)
 
     return measure
 
@@ -121,7 +127,6 @@ def main() -> None:
 
     while True:
         print(f"High side pulse of: {read_pulse()} microseconds detected.")
-        utime.sleep_ms(250)
 
 
 if __name__ == "__main__":
