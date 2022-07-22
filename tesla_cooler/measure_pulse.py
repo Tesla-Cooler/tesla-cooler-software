@@ -3,12 +3,10 @@ Use PIO to measure properties of square waves.
 
 Adapted from a post by `danjperrorn` on the micropython forum:
     https://forum.micropython.org/viewtopic.php?f=21&t=9895#p55342
-
 """
 
-
 import rp2
-import uasyncio
+import utime
 from machine import Pin, mem32
 from rp2 import PIO, asm_pio
 
@@ -18,15 +16,15 @@ except ImportError:
     pass  # we're probably on the pico if this occurs.
 
 
-@asm_pio()
+PICO_CLOCK_FREQUENCY = 1.25e8
+PICO_CLOCK_PERIOD_SECONDS = 1 / PICO_CLOCK_FREQUENCY
+PICO_CLOCK_PERIOD_MICROSECONDS = PICO_CLOCK_PERIOD_SECONDS / 1e-6
+
+
+@asm_pio(sideset_init=rp2.PIO.OUT_LOW)
 def pulse_length_pio() -> None:  # pylint: disable=all
     """
     PIO program to read pulse length.
-
-    Given:
-        - Clock set at 500Khz, Cycle is 2us
-        - Drive output low for at least 20ms
-
     :return: None
     """
 
@@ -51,13 +49,13 @@ def pulse_length_pio() -> None:  # pylint: disable=all
     # Decrease the value of x by a single count.
     # If this value is non-zero, go to the loop 2 label.
     # If this value is zero, do nothing.
-    jmp(x_dec, "x_decremented")  # type: ignore
+    jmp(x_dec, "x_decremented").side(1)  # type: ignore
     label("x_decremented")  # type: ignore
 
     # If the pin is still high, loop back around to loop1
     # This means we'll keep counting down x until the pin goes low.
     # Once the pin goes low, we'll move onto the next instruction.
-    jmp(pin, "wait_for_low")  # type: ignore
+    jmp(pin, "wait_for_low").side(0)  # type: ignore
 
     # The pin has gone low, and x represents how many clock cycles it took to complete.
     # Push the current value of x onto the input shift register.
@@ -66,17 +64,14 @@ def pulse_length_pio() -> None:  # pylint: disable=all
     mov(isr, x)  # type: ignore
 
     # Push the contents of the contents of the ISR into the RX FIFO
-    push()  # type: ignore
-
-    # Signal the CPU that we've read a pulse.
-    irq(block)  # type: ignore
+    push(block)  # type: ignore
 
     wrap()  # type: ignore
 
 
 def measure_pulse_duration(
-    data_pin: int, state_machine_index: int = 0
-) -> "t.Callable[[], t.Optional[int]]":
+    data_pin: Pin, counter_pin: Pin, state_machine_index: int = 0
+) -> "t.Callable[[], t.Optional[float]]":
     """
     Creates a callable to measure the length of a square-wave pulse on a GPIO pin.
     Calling the returned callable will measure the most recent pulse duration in microseconds.
@@ -87,16 +82,13 @@ def measure_pulse_duration(
     :return: Callable that returns the pulse duration in microseconds.
     """
 
-    lock = uasyncio.Lock()
-    lock.acquire()
-
     state_machine = rp2.StateMachine(state_machine_index)
-    state_machine.init(pulse_length_pio, freq=10000000, in_base=data_pin)
-    state_machine.irq(handler=lambda pio: lock.release())
+
+    state_machine.init(pulse_length_pio, in_base=data_pin, sideset_base=counter_pin)
 
     state_machine.active(1)
 
-    def measure(timeout_us: int = 10000) -> "t.Optional[int]":  # pylint: disable=unused-argument
+    def measure(timeout_us: int = 10000) -> "t.Optional[float]":  # pylint: disable=unused-argument
         """
         Output Callable.
         TODO: Implement timeout
@@ -107,12 +99,8 @@ def measure_pulse_duration(
 
         # Push a single byte into the StateMachine's fifo, to signal it to read a waveform.
         state_machine.put(0x0)
-
-        # Only the interrupt at the end of the pio program can unlock this lock, so we'll
-        # wait around until it's ready.
-        lock.acquire()
-
-        return int((3 + (0xFFFFFFFF - state_machine.get())) // 5)
+        high_cycle_counts = 0xFFFFFFFF - state_machine.get()
+        return float((high_cycle_counts * 2) * PICO_CLOCK_PERIOD_MICROSECONDS)
 
     return measure
 
@@ -123,7 +111,7 @@ def main() -> None:
     :return: None
     """
 
-    read_pulse = measure_pulse_duration(data_pin=Pin(0, Pin.IN))
+    read_pulse = measure_pulse_duration(data_pin=Pin(0, Pin.IN), counter_pin=Pin(1, Pin.OUT))
 
     while True:
         print(f"High side pulse of: {read_pulse()} microseconds detected.")
