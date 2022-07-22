@@ -5,10 +5,7 @@ Adapted from a post by `danjperrorn` on the micropython forum:
     https://forum.micropython.org/viewtopic.php?f=21&t=9895#p55342
 """
 
-import array
-
 import rp2
-import uasyncio
 import utime
 from machine import Pin, mem32
 from rp2 import PIO, asm_pio
@@ -28,6 +25,7 @@ PICO_CLOCK_PERIOD_MICROSECONDS = PICO_CLOCK_PERIOD_SECONDS / 1e-6
 def pulse_length_pio() -> None:  # pylint: disable=all
     """
     PIO program to read pulse length.
+
     :return: None
     """
 
@@ -74,6 +72,7 @@ def fifo_count_timeout(fifo_callable: "t.Callable[[], int]", timeout_us: int) ->
     """
     Continuously calls `fifo_callable` until it reports there are values in the queue.
     If no values become available within `timeout_us`, 0 is returned.
+
     :param fifo_callable: Either `rp2.StateMachine.rx_fifo` or `rp2.StateMachine.tx_fifo`, or
     some other function wrapping those two.
     :param timeout_us: Amount of time in microseconds to wait for values to arrive.
@@ -99,7 +98,6 @@ def measure_pulse_duration(
     Creates a callable to measure the length of a square-wave pulse on a GPIO pin.
     Calling the returned callable will measure the most recent pulse duration in microseconds.
 
-    # TODO: Want to validate `data_pin` and `state_machine_index`, these are really enums.
     :param data_pin: Index of pin attached to the pulse source.
     :param counter_pin: Index of pin attached to the pulse source.
     :param state_machine_index: The PIO state machine index to be used to make the measurements.
@@ -115,6 +113,7 @@ def measure_pulse_duration(
     def measure(timeout_us: int = 10000) -> "t.Optional[float]":  # pylint: disable=unused-argument
         """
         Output Callable.
+
         :param timeout_us: If a pulse doesn't occur within this amount of time, `None` will be
         returned.
         :return: The pulse duration if a pulse occurs, `None` if otherwise.
