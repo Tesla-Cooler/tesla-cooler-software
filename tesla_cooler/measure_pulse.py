@@ -63,7 +63,8 @@ def pulse_length_pio() -> None:  # pylint: disable=all
     mov(isr, x)  # type: ignore
 
     # Push the contents of the contents of the ISR into the RX FIFO
-    # `noblock` is used
+    # Because `noblock` is used, new counts will be written to RX FIFO as often as pulses
+    # are detected, and older pulse durations will be overwritten.
     push(noblock)  # type: ignore
 
     wrap()  # type: ignore
