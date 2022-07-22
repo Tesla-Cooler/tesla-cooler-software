@@ -5,7 +5,10 @@ Adapted from a post by `danjperrorn` on the micropython forum:
     https://forum.micropython.org/viewtopic.php?f=21&t=9895#p55342
 """
 
+import array
+
 import rp2
+import uasyncio
 import utime
 from machine import Pin, mem32
 from rp2 import PIO, asm_pio
@@ -32,10 +35,6 @@ def pulse_length_pio() -> None:  # pylint: disable=all
     set(pindirs, 0)  # type: ignore
 
     wrap_target()  # type: ignore
-
-    # Wait for the CPU to send us a byte. This is how we're signaled to start looking for
-    # Pulses.
-    pull(block)  # type: ignore
 
     # Set the x scratch register to 0
     set(x, 0)  # type: ignore
@@ -64,9 +63,32 @@ def pulse_length_pio() -> None:  # pylint: disable=all
     mov(isr, x)  # type: ignore
 
     # Push the contents of the contents of the ISR into the RX FIFO
-    push(block)  # type: ignore
+    # `noblock` is used
+    push(noblock)  # type: ignore
 
     wrap()  # type: ignore
+
+
+def fifo_count_timeout(fifo_callable: "t.Callable[[], int]", timeout_us: int) -> int:
+    """
+    Continuously calls `fifo_callable` until it reports there are values in the queue.
+    If no values become available within `timeout_us`, 0 is returned.
+    :param fifo_callable: Either `rp2.StateMachine.rx_fifo` or `rp2.StateMachine.tx_fifo`, or
+    some other function wrapping those two.
+    :param timeout_us: Amount of time in microseconds to wait for values to arrive.
+    :return: The value returned by the callable, 0 if nothing arrives.
+    """
+
+    start = utime.ticks_us()
+
+    while True:
+
+        if utime.ticks_us() - start > timeout_us:
+            return 0
+
+        output = fifo_callable()
+        if output:
+            return output
 
 
 def measure_pulse_duration(
@@ -78,29 +100,37 @@ def measure_pulse_duration(
 
     # TODO: Want to validate `data_pin` and `state_machine_index`, these are really enums.
     :param data_pin: Index of pin attached to the pulse source.
+    :param counter_pin: Index of pin attached to the pulse source.
     :param state_machine_index: The PIO state machine index to be used to make the measurements.
     :return: Callable that returns the pulse duration in microseconds.
     """
 
-    state_machine = rp2.StateMachine(state_machine_index)
-
-    state_machine.init(pulse_length_pio, in_base=data_pin, sideset_base=counter_pin)
+    state_machine = rp2.StateMachine(
+        state_machine_index, pulse_length_pio, in_base=data_pin, sideset_base=counter_pin
+    )
 
     state_machine.active(1)
 
     def measure(timeout_us: int = 10000) -> "t.Optional[float]":  # pylint: disable=unused-argument
         """
         Output Callable.
-        TODO: Implement timeout
         :param timeout_us: If a pulse doesn't occur within this amount of time, `None` will be
         returned.
         :return: The pulse duration if a pulse occurs, `None` if otherwise.
         """
 
-        # Push a single byte into the StateMachine's fifo, to signal it to read a waveform.
-        state_machine.put(0x0)
-        high_cycle_counts = 0xFFFFFFFF - state_machine.get()
-        return float((high_cycle_counts * 2) * PICO_CLOCK_PERIOD_MICROSECONDS)
+        words_in_fifo = fifo_count_timeout(
+            fifo_callable=state_machine.rx_fifo, timeout_us=timeout_us
+        )
+
+        if not words_in_fifo:
+            return None
+
+        inverted_counts = (state_machine.get() for _ in range(words_in_fifo))
+        high_cycle_counts = list(map(lambda value: int(0xFFFFFFFF - value), inverted_counts))
+        average_counts = sum(high_cycle_counts) / len(high_cycle_counts)
+
+        return float((average_counts * 2) * PICO_CLOCK_PERIOD_MICROSECONDS)
 
     return measure
 
