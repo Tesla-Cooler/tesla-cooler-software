@@ -82,6 +82,9 @@ def pulse_properties_pio() -> None:  # pylint: disable=all
     in_(x, 16)  # type: ignore
     in_(y, 16)  # type: ignore
 
+    # TODO: this means we can't measure that long of pulses. Figure out how max length
+    # relates to clock and add this to documentation.
+
     # Push the contents of the contents of the ISR into the RX FIFO
     # Because `noblock` is used, new counts will be written to RX FIFO as often as pulses
     # are detected, and older pulse durations will be overwritten.
@@ -150,7 +153,7 @@ def measure_pulse_properties(
         :return: Period in Nanoseconds.
         """
 
-        return cycles * clock_period_microseconds
+        return cycles * clock_period_microseconds * 2
 
     def measure(
         timeout_us: int = 10000,
@@ -175,7 +178,7 @@ def measure_pulse_properties(
 
         # These are both in clock cycles
         periods_cs, widths_cs = map(
-            lambda values: list(map(lambda value: int(0xFFFF - value * 2), values)),
+            lambda values: list(map(lambda value: int(0xFFFF - value), values)),
             zip(*unpacked_values),
         )
 
@@ -202,7 +205,6 @@ def main() -> None:
     while True:
 
         print(f"Properties: {latest_properties()}")
-
         utime.sleep(0.1)
 
 
