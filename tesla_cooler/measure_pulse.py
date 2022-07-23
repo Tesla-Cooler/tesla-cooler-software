@@ -79,17 +79,24 @@ def pulse_properties_pio() -> None:  # pylint: disable=all
     # Push the current value of x onto the input shift register.
     # The input shift register is connected to the RX FIFO, so this value will be transferred
     # out from the state machine to the CPU.
-    mov(isr, invert(x))  # type: ignore
+    in_(x, 16)  # type: ignore
+    in_(y, 16)  # type: ignore
 
     # Push the contents of the contents of the ISR into the RX FIFO
     # Because `noblock` is used, new counts will be written to RX FIFO as often as pulses
     # are detected, and older pulse durations will be overwritten.
-    push()  # type: ignore
-
-    mov(isr, invert(y))  # type: ignore
-    push()  # type: ignore
+    push(noblock)  # type: ignore
 
     wrap()  # type: ignore
+
+
+def list_mean(values: "t.List[int]") -> float:
+    """
+    Get the mean of a list of numbers.
+    :param values: Either ints or floats.
+    :return: The mean of the input list.
+    """
+    return float(sum(values) / len(values))
 
 
 def fifo_count_timeout(fifo_callable: "t.Callable[[], int]", timeout_us: int) -> int:
@@ -135,9 +142,19 @@ def measure_pulse_properties(
     )
     state_machine.active(1)
 
+    def cycles_to_periods_ns(cycles: float) -> float:
+        """
+        Converts the number of clock cycles as returned by the PIO to the period elapsed in
+        Nanoseconds.
+        :param cycles: Number of cycles.
+        :return: Period in Nanoseconds.
+        """
+
+        return cycles * clock_period_microseconds
+
     def measure(
         timeout_us: int = 10000,
-    ) -> "t.Optional[PulseProperties]":  # pylint: disable=unused-argument
+    ) -> "t.Optional[PulseProperties]":
         """
         Output Callable.
 
@@ -153,13 +170,22 @@ def measure_pulse_properties(
         if not words_in_fifo:
             return None
 
-        period = state_machine.get()
-        width = state_machine.get()
+        packed_values = (state_machine.get() for _ in range(words_in_fifo))
+        unpacked_values = (((packed >> 16) & 0xFFFF, packed & 0xFFFF) for packed in packed_values)
+
+        # These are both in clock cycles
+        periods_cs, widths_cs = map(
+            lambda values: list(map(lambda value: int(0xFFFF - value * 2), values)),
+            zip(*unpacked_values),
+        )
+
+        average_period_cs = list_mean(periods_cs)
+        average_width_cs = list_mean(widths_cs)
 
         return PulseProperties(
-            period_ns=period * 2 * clock_period_microseconds,
-            width_ns=width * 2 * clock_period_microseconds,
-            duty_cycle=width / period,
+            period_ns=cycles_to_periods_ns(average_period_cs),
+            width_ns=cycles_to_periods_ns(average_width_cs),
+            duty_cycle=average_width_cs / average_period_cs,
         )
 
     return measure
