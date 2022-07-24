@@ -11,15 +11,11 @@ from machine import Pin, mem32
 from rp2 import PIO, asm_pio
 
 try:
+    import typing as t
     from collections import namedtuple
 except ImportError:
     # we're probably on the pico if this occurs.
     from ucollections import namedtuple  # type: ignore
-
-try:
-    import typing as t  # pylint: disable=unused-import
-except ImportError:
-    pass  # we're probably on the pico if this occurs.
 
 
 PICO_CLOCK_FREQUENCY_HZ = int(1.25e8)
@@ -27,15 +23,24 @@ PICO_CLOCK_FREQUENCY_HZ = int(1.25e8)
 
 PulseProperties = namedtuple(
     "PulseProperties",
-    ["period_ns", "width_ns", "duty_cycle"],
+    [
+        # The pulse's period (time from rising edge to rising edge) in Nanoseconds as a float.
+        "period_ns",
+        # The duration of the high side of the pulse in Nanoseconds as a float.
+        "width_ns",
+        # Pulse's width / pulse's period. If the period is 0, or any other divide by zero situation
+        # occurs, this value will be None, otherwise it will be a float.
+        "duty_cycle",
+    ],
 )
 
 
 @asm_pio()
 def pulse_properties_pio() -> None:  # pylint: disable=all
     """
-    PIO program to read pulse length.
-
+    PIO program to measure pulse width and period.
+    Width and period are truncated to 16 bits, packed into RX FIFO, and shifted out in a single
+    operation.
     :return: None
     """
 
@@ -44,50 +49,52 @@ def pulse_properties_pio() -> None:  # pylint: disable=all
 
     wrap_target()  # type: ignore
 
-    # Set the x scratch register to 0
+    # Set the `x` scratch register to 0
     set(x, 0)  # type: ignore
 
-    # Wait for the input pin to go low, then to go high.
+    # Wait for the input `pin` to go low, then to go high.
     wait(0, pin, 0)  # type: ignore
     wait(1, pin, 0)  # type: ignore
 
     label("wait_for_low")  # type: ignore
 
-    # Decrease the value of x by a single count.
-    # If this value is non-zero, go to x_decremented.
+    # Decrease the value of `x` by a single count.
+    # If this value is non-zero, go to `x_decremented`.
     # If this value is zero, do nothing.
     # We never actually expect this to become zero, but we have to do a `jmp` here because it's
-    # the only way to change the value of x.
+    # the only way to change the value of `x`.
     jmp(x_dec, "x_decremented")  # type: ignore
     label("x_decremented")  # type: ignore
 
-    # If the pin is still high, loop back around to wait_for_low
-    # This means we'll keep counting down x until the pin goes low.
-    # Once the pin goes low, we'll move onto the next instruction.
+    # If the `pin` is still high, loop back around to `wait_for_low`
+    # This means we'll keep decrementing `x` until the pin goes low.
+    # Once the `pin` goes low, we'll move onto the next instruction.
     jmp(pin, "wait_for_low")  # type: ignore
 
-    # Pin is now low, save the counts it was high into y.
-    # we need to wait for it to go high again
+    # `pin` is now low, save the counts it was high into `y`.
     mov(y, x)  # type: ignore
 
+    # Wait around until pin goes high again, decrementing `x` for each count it isn't high.
     label("pin_still_low")  # type: ignore
     jmp(pin, "pin_high_again")  # type: ignore
     jmp(x_dec, "pin_still_low")  # type: ignore
     label("pin_high_again")  # type: ignore
 
-    # The pin has gone low, and x represents how many clock cycles it took to complete.
-    # Push the current value of x onto the input shift register.
-    # The input shift register is connected to the RX FIFO, so this value will be transferred
-    # out from the state machine to the CPU.
+    # The `pin` has gone low for the second time.
+    # `x` represents the total number of clock cycles it took to complete a period,
+    # `y` represents how many clock cycles the pulse was high.
+
+    # In order to get both of these values out to the CPU in a single `push`, we truncate
+    # the counts to the first 16 bits worth of data. `in` automatically shifts data over per
+    # invocation, so by the time both of these complete, the `ISR` contains a single 32 bit word
+    # made up of the period and pulse width.
     in_(x, 16)  # type: ignore
     in_(y, 16)  # type: ignore
 
-    # TODO: this means we can't measure that long of pulses. Figure out how max length
-    # relates to clock and add this to documentation.
-
-    # Push the contents of the contents of the ISR into the RX FIFO
-    # Because `noblock` is used, new counts will be written to RX FIFO as often as pulses
-    # are detected, and older pulse durations will be overwritten.
+    # Push the contents of the contents of the `ISR` into the `RX FIFO`
+    # Because `noblock` is used, new counts will be written to `RX FIFO` as often as pulses
+    # are detected, and older pulse durations will be overwritten. This gives the CPU the ability
+    # to always get the most recent reading decoupled from how often it's able to pull data.
     push(noblock)  # type: ignore
 
     wrap()  # type: ignore
@@ -130,10 +137,24 @@ def measure_pulse_properties(
 ) -> "t.Callable[[], t.Optional[PulseProperties]]":
     """
     Creates a callable to measure the length of a square-wave pulse on a GPIO pin.
-    Calling the returned callable will measure the most recent pulse duration in microseconds.
+    Calling the returned callable will measure the most recent pulse period/width in microseconds.
 
-    :param data_pin: Index of pin attached to the pulse source.
+    :param data_pin: `Pin` object, represents which physical pin to read pulses from.
     :param state_machine_index: The PIO state machine index to be used to make the measurements.
+    :param clock_freq_hz: The frequency to drive the state machine at. Note that this will effect
+    the range of measurable frequencies. Both Period and Pulse width are sent back to the CPU from
+    the state machine as 16 bit numbers, and therefore have a maximum value of 65535. If the
+    pulse lasts longer than can be encoded into this 16 bit value, the result will not make any
+    sense. The formula for the min/max frequency given the clock frequency is as follows:
+
+    min_freq_hz = 1/(1/(c*2) * 65535)
+    max_freq_hz = 1/(1/(c*2) * 1)
+
+    Given c = input clock frequency in hz. By default, the fastest possible clock frequency on the
+    pico is used, so this range is between ~3815 Hz - ~250 MHz. If you wanted to measure waveforms
+    in the 100-500 Hz range, you could set `clock_freq_hz` to 2949075, resulting in a measurable
+    range from ~90 Hz - ~5.898 MHz.
+
     :return: Callable that returns the pulse duration in microseconds.
     """
 
@@ -141,8 +162,9 @@ def measure_pulse_properties(
     clock_period_microseconds = clock_period_seconds / 1e-6
 
     state_machine = rp2.StateMachine(
-        state_machine_index, prog=pulse_properties_pio, in_base=data_pin
+        state_machine_index, prog=pulse_properties_pio, in_base=data_pin, freq=clock_freq_hz
     )
+
     state_machine.active(1)
 
     def cycles_to_periods_ns(cycles: float) -> float:
@@ -159,11 +181,14 @@ def measure_pulse_properties(
         timeout_us: int = 10000,
     ) -> "t.Optional[PulseProperties]":
         """
-        Output Callable.
+        Output Callable. Pulls all available data from the StateMachine's RX FIFO, unpacks each
+        value, takes the average across each of the entries in the RX FIFO, and returns the result
+        as a NamedTuple.
 
         :param timeout_us: If a pulse doesn't occur within this amount of time, `None` will be
         returned.
-        :return: The pulse duration if a pulse occurs, `None` if otherwise.
+        :return: If a pulse or pulses occur, their period and pulse with are returned as a
+        NamedTuple. If no pulses occur None will be returned.
         """
 
         words_in_fifo = fifo_count_timeout(
@@ -185,10 +210,15 @@ def measure_pulse_properties(
         average_period_cs = list_mean(periods_cs)
         average_width_cs = list_mean(widths_cs)
 
+        try:
+            duty_cycle = average_width_cs / average_period_cs
+        except ZeroDivisionError:
+            duty_cycle = None
+
         return PulseProperties(
             period_ns=cycles_to_periods_ns(average_period_cs),
             width_ns=cycles_to_periods_ns(average_width_cs),
-            duty_cycle=average_width_cs / average_period_cs,
+            duty_cycle=duty_cycle,
         )
 
     return measure
