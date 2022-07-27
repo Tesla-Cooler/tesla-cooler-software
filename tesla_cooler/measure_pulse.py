@@ -7,7 +7,7 @@ Adapted from a post by `danjperrorn` on the micropython forum:
 
 import rp2
 import utime
-from machine import Pin, mem32
+from machine import Pin, PWM
 from rp2 import PIO, asm_pio
 
 try:
@@ -17,6 +17,8 @@ except ImportError:
     # we're probably on the pico if this occurs.
     from ucollections import namedtuple  # type: ignore
 
+
+MAX_32_BIT_VALUE = 4294967295
 
 PICO_CLOCK_FREQUENCY_HZ = int(1.25e8)
 
@@ -36,11 +38,13 @@ PulseProperties = namedtuple(
 
 
 @asm_pio()
-def pulse_properties_pio() -> None:  # pylint: disable=all
+def pulse_properties_pio_old() -> None:  # pylint: disable=all
     """
     PIO program to measure pulse width and period.
     Width and period are truncated to 16 bits, packed into RX FIFO, and shifted out in a single
     operation.
+
+    TODO: cannot handle a duty cycle of O% or 100% at all.
     :return: None
     """
 
@@ -100,6 +104,78 @@ def pulse_properties_pio() -> None:  # pylint: disable=all
     wrap()  # type: ignore
 
 
+@asm_pio(sideset_init=(PIO.OUT_LOW))
+def pulse_properties_pio() -> None:  # pylint: disable=all
+    """
+    PIO program to measure pulse width and period.
+    Width and period are truncated to 16 bits, packed into RX FIFO, and shifted out in a single
+    operation.
+
+    TODO: cannot handle a duty cycle of O% or 100% at all.
+    :return: None
+    """
+
+    # Set the pin as an input
+    set(pindirs, 0)  # type: ignore
+
+    wrap_target()  # type: ignore
+
+    # Load the OSR from the CPU
+    pull(block)
+
+    # Copy the value in the OSR to y
+    mov(y, osr)
+
+    # Set the value in y (so the value from the OSR) as the initial value for x.
+    mov(x, y)
+
+    # Pin's value is currently unknown.
+    # We wait for the pin's value to be high.
+
+    label("init_pin_low")  # type: ignore
+    jmp(pin, "init_pin_high")  # type: ignore
+    jmp(x_dec, "init_pin_low")  # type: ignore
+    label("init_pin_high")  # type: ignore
+
+    # The pin has become high, or it started out as high.
+
+    mov(x, y)  # Reset the timeout counter to the value given by user, which is stored in `y`.
+
+    # Wait for a falling edge.
+
+    label("wait_for_low")  # type: ignore
+    jmp(x_dec, "x_decremented")  # type: ignore
+    label("x_decremented")  # type: ignore
+    jmp(pin, "wait_for_low")  # type: ignore
+
+    # Falling edge has occurred. Start the countdown timer.
+
+    mov(x, y)  # Reset the timeout counter to the value given by user, which is stored in `y`.
+
+    # Wait for a rising edge.
+
+    # Wait around until pin goes high again, decrementing `x` for each count it isn't high.
+    label("pin_still_low")  # type: ignore
+    jmp(pin, "pin_high_again")  # type: ignore
+    jmp(x_dec, "pin_still_low")  # type: ignore
+    label("pin_high_again")  # type: ignore
+
+    in_(x, 32)  # type: ignore
+    push(block)  # type: ignore
+
+    # Wait for another falling edge.
+
+    label("wait_for_low_2")  # type: ignore
+    jmp(x_dec, "x_decremented_2")  # type: ignore
+    label("x_decremented_2")  # type: ignore
+    jmp(pin, "wait_for_low_2")  # type: ignore
+
+    in_(x, 32)  # type: ignore
+    push(block)  # type: ignore
+
+    wrap()  # type: ignore
+
+
 def list_mean(values: "t.List[int]") -> float:
     """
     Get the mean of a list of numbers.
@@ -133,7 +209,7 @@ def fifo_count_timeout(fifo_callable: "t.Callable[[], int]", timeout_us: int) ->
 
 
 def measure_pulse_properties(
-    data_pin: Pin, state_machine_index: int, clock_freq_hz: int = PICO_CLOCK_FREQUENCY_HZ
+    data_pin: Pin, debug_pin: Pin, state_machine_index: int, clock_freq_hz: int = PICO_CLOCK_FREQUENCY_HZ
 ) -> "t.Callable[[], t.Optional[PulseProperties]]":
     """
     Creates a callable to measure the length of a square-wave pulse on a GPIO pin.
@@ -162,7 +238,7 @@ def measure_pulse_properties(
     clock_period_microseconds = clock_period_seconds / 1e-6
 
     state_machine = rp2.StateMachine(
-        state_machine_index, prog=pulse_properties_pio, in_base=data_pin, freq=clock_freq_hz
+        state_machine_index, prog=pulse_properties_pio, jmp_pin=data_pin, sideset_base=debug_pin, freq=clock_freq_hz
     )
 
     state_machine.active(1)
@@ -191,6 +267,11 @@ def measure_pulse_properties(
         NamedTuple. If no pulses occur None will be returned.
         """
 
+        timeout_pulses = MAX_32_BIT_VALUE // 1000
+
+        # TODO: need to convert timeout in US to pulses
+        state_machine.put(timeout_pulses)
+
         words_in_fifo = fifo_count_timeout(
             fifo_callable=state_machine.rx_fifo, timeout_us=timeout_us
         )
@@ -198,33 +279,49 @@ def measure_pulse_properties(
         if not words_in_fifo:
             return None
 
-        packed_values = (state_machine.get() for _ in range(words_in_fifo))
-        unpacked_values = (((packed >> 16) & 0xFFFF, packed & 0xFFFF) for packed in packed_values)
+        # packed_value = state_machine.get()
 
-        # These are both in clock cycles
-        periods_cs, widths_cs = map(
-            lambda values: list(map(lambda value: int(0xFFFF - value), values)),
-            zip(*unpacked_values),
-        )
+        """
+        if packed_value == MAX_32_BIT_VALUE:
+            return PulseProperties(
+                period_ns=None,
+                width_ns=None,
+                duty_cycle=0,
+            )
+        elif packed_value == timeout_pulses:
+            return PulseProperties(
+                period_ns=None,
+                width_ns=None,
+                duty_cycle=1,
+            )
+        
+        else:
+        """
 
-        average_period_cs = list_mean(periods_cs)
-        average_width_cs = list_mean(widths_cs)
+        # a = timeout_pulses - (packed_value >> 16) & 0xFFFF
+        # b = (packed_value & 0xFFFF)
+
+        a = timeout_pulses - state_machine.get()
+        b = timeout_pulses - state_machine.get()
+
+        period_cs = b
+        width_cs = (b-a)
 
         try:
-            duty_cycle = average_width_cs / average_period_cs
+            duty_cycle = width_cs / period_cs
         except ZeroDivisionError:
             duty_cycle = None
 
         return PulseProperties(
-            period_ns=cycles_to_periods_ns(average_period_cs),
-            width_ns=cycles_to_periods_ns(average_width_cs),
+            period_ns=cycles_to_periods_ns(period_cs),
+            width_ns=cycles_to_periods_ns(width_cs),
             duty_cycle=duty_cycle,
         )
 
     return measure
 
 
-def main() -> None:
+def main_properties() -> None:
     """
     Entrypoint. Prints pulse duration periodically.
     :return: None
@@ -236,6 +333,26 @@ def main() -> None:
 
         print(f"Properties: {latest_properties()}")
         utime.sleep(0.1)
+
+
+def main() -> None:
+    """
+    Entrypoint. Prints pulse duration periodically.
+    :return: None
+    """
+
+    # pwm = PWM(Pin(1, Pin.OUT))  # create a PWM object on a pin
+    # f_base = 100
+    # pwm.duty_u16(32768)
+    # pwm.freq(int(f_base))
+
+    latest_properties = measure_pulse_properties(data_pin=Pin(0), debug_pin=Pin(1, Pin.OUT), state_machine_index=0)
+
+    while True:
+
+        print(latest_properties())
+
+
 
 
 if __name__ == "__main__":
