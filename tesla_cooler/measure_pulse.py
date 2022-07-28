@@ -20,7 +20,7 @@ Adapted from a post by `danjperrorn` on the micropython forum:
 
 import rp2
 import utime
-from machine import PWM, Pin
+from machine import PWM, Pin, Timer
 from rp2 import PIO, asm_pio
 
 try:
@@ -50,7 +50,7 @@ PulseProperties = namedtuple(
 )
 
 
-@asm_pio(autopush=True)
+@asm_pio(autopush=False)
 def pulse_properties_pio() -> None:  # pylint: disable=all
     """
     PIO program to measure pulse width and period.
@@ -81,8 +81,9 @@ def pulse_properties_pio() -> None:  # pylint: disable=all
 
     label("init_pin_low")  # type: ignore
     jmp(pin, "init_pin_high")  # type: ignore
-    # TODO: needs a zero detection
     jmp(x_dec, "init_pin_low")  # type: ignore
+    in_(x, 32)  # type: ignore
+    jmp("write_output")  # type: ignore
     label("init_pin_high")  # type: ignore
 
     # The pin has become high, or it started out as high.
@@ -93,8 +94,9 @@ def pulse_properties_pio() -> None:  # pylint: disable=all
     # Wait for a falling edge.
 
     label("wait_for_low")  # type: ignore
-    # TODO: needs a zero detection
     jmp(x_dec, "x_decremented")  # type: ignore
+    in_(y, 32)  # type: ignore
+    jmp("write_output")  # type: ignore
     label("x_decremented")  # type: ignore
     jmp(pin, "wait_for_low")  # type: ignore
 
@@ -109,8 +111,9 @@ def pulse_properties_pio() -> None:  # pylint: disable=all
     # Wait around until pin goes high again, decrementing `x` for each count it isn't high.
     label("pin_still_low")  # type: ignore
     jmp(pin, "pin_high_again")  # type: ignore
-    # TODO: needs a zero detection
     jmp(x_dec, "pin_still_low")  # type: ignore
+    in_(x, 32)  # type: ignore
+    jmp("write_output")  # type: ignore
     label("pin_high_again")  # type: ignore
 
     # Point C
@@ -119,13 +122,17 @@ def pulse_properties_pio() -> None:  # pylint: disable=all
     # Wait for another falling edge.
 
     label("wait_for_low_2")  # type: ignore
-    # TODO: needs a zero detection
     jmp(x_dec, "x_decremented_2")  # type: ignore
+    in_(y, 32)  # type: ignore
+    jmp("write_output")  # type: ignore
     label("x_decremented_2")  # type: ignore
     jmp(pin, "wait_for_low_2")  # type: ignore
 
     # Point D
     in_(x, 16)  # type: ignore
+
+    label("write_output")  # type: ignore
+    push(noblock)  # type: ignore
 
     wrap()  # type: ignore
 
@@ -238,6 +245,8 @@ def measure_pulse_properties(
         if not words_in_fifo:
             return None
 
+        # TODO: we can now read a bunch of values out of the rx_fifo and take the average
+
         packed_value = state_machine.get()
 
         if packed_value == MAX_32_BIT_VALUE:
@@ -252,23 +261,20 @@ def measure_pulse_properties(
                 width_ns=None,
                 duty_cycle=1,
             )
-        
+
         else:
 
-            c = ((packed_value >> 16) & 0xFFFF) | (timeout_pulses & 0xFF0000)
-            d = (packed_value & 0xFFFF) | (timeout_pulses & 0xFF0000)
+            # TODO: why do I have to do this mask?
+            c_point_clock_cycles = ((packed_value >> 16) & 0xFFFF) | (timeout_pulses & 0xFF0000)
+            d_point_clock_cycles = (packed_value & 0xFFFF) | (timeout_pulses & 0xFF0000)
 
-            period_cs = timeout_pulses - d
-            width_cs = c - d
+            period_cs = timeout_pulses - d_point_clock_cycles
+            width_cs = c_point_clock_cycles - d_point_clock_cycles
 
             try:
                 duty_cycle = width_cs / period_cs
             except ZeroDivisionError:
                 duty_cycle = None
-
-            print(
-                f"Packed (hex): {hex(packed_value) if packed_value is not None else ''} // C - Int: {c}, Hex: {hex(c)}, D - Int: {d}, Hex: {hex(d)}. Duty Cycle: {duty_cycle}"
-            )
 
             return PulseProperties(
                 period_ns=cycles_to_periods_ns(period_cs),
@@ -299,18 +305,31 @@ def main() -> None:
     :return: None
     """
 
-    # pwm = PWM(Pin(1, Pin.OUT))  # create a PWM object on a pin
-    # f_base = 100
-    # pwm.duty_u16(32768)
-    # pwm.freq(int(f_base))
+    pin = Pin(1, Pin.OUT)  # create a PWM object on a pin
 
-    latest_properties = measure_pulse_properties(
-        data_pin=Pin(0), state_machine_index=0
-    )
+    latest_properties = measure_pulse_properties(data_pin=Pin(0), state_machine_index=0)
+
+    timer = Timer()
+
+    previous_duty = None
 
     while True:
 
-        latest_properties()
+        duty = latest_properties().duty_cycle
+
+        if duty != previous_duty:
+
+            utime.sleep(1)
+
+            timer.deinit()
+
+            output_period_ms = int(10 + 10 * duty)
+
+            previous_duty = duty
+
+            print(f"Input PWM: {duty}, Output Frequency: {output_period_ms}")
+
+            timer.init(period=output_period_ms, callback=lambda tim: pin.toggle())
 
 
 if __name__ == "__main__":
