@@ -3,6 +3,19 @@ Use PIO to measure properties of square waves.
 
 Adapted from a post by `danjperrorn` on the micropython forum:
     https://forum.micropython.org/viewtopic.php?f=21&t=9895#p55342
+
+
+    a      b      c     d
+     ******       ******
+     *    *       *    *
+******    *********    ******
+
+
+    a      b      c     d
+***********       ******
+          *       *    *
+          *********    ******
+
 """
 
 import rp2
@@ -18,7 +31,7 @@ except ImportError:
     from ucollections import namedtuple  # type: ignore
 
 
-MAX_32_BIT_VALUE = 4294967295
+MAX_32_BIT_VALUE = 0xFFFFFFFF
 
 PICO_CLOCK_FREQUENCY_HZ = int(1.25e8)
 
@@ -37,74 +50,7 @@ PulseProperties = namedtuple(
 )
 
 
-@asm_pio()
-def pulse_properties_pio_old() -> None:  # pylint: disable=all
-    """
-    PIO program to measure pulse width and period.
-    Width and period are truncated to 16 bits, packed into RX FIFO, and shifted out in a single
-    operation.
-
-    TODO: cannot handle a duty cycle of O% or 100% at all.
-    :return: None
-    """
-
-    # Set the pin as an input
-    set(pindirs, 0)  # type: ignore
-
-    wrap_target()  # type: ignore
-
-    # Set the `x` scratch register to 0
-    set(x, 0)  # type: ignore
-
-    # Wait for the input `pin` to go low, then to go high.
-    wait(0, pin, 0)  # type: ignore
-    wait(1, pin, 0)  # type: ignore
-
-    label("wait_for_low")  # type: ignore
-
-    # Decrease the value of `x` by a single count.
-    # If this value is non-zero, go to `x_decremented`.
-    # If this value is zero, do nothing.
-    # We never actually expect this to become zero, but we have to do a `jmp` here because it's
-    # the only way to change the value of `x`.
-    jmp(x_dec, "x_decremented")  # type: ignore
-    label("x_decremented")  # type: ignore
-
-    # If the `pin` is still high, loop back around to `wait_for_low`
-    # This means we'll keep decrementing `x` until the pin goes low.
-    # Once the `pin` goes low, we'll move onto the next instruction.
-    jmp(pin, "wait_for_low")  # type: ignore
-
-    # `pin` is now low, save the counts it was high into `y`.
-    mov(y, x)  # type: ignore
-
-    # Wait around until pin goes high again, decrementing `x` for each count it isn't high.
-    label("pin_still_low")  # type: ignore
-    jmp(pin, "pin_high_again")  # type: ignore
-    jmp(x_dec, "pin_still_low")  # type: ignore
-    label("pin_high_again")  # type: ignore
-
-    # The `pin` has gone low for the second time.
-    # `x` represents the total number of clock cycles it took to complete a period,
-    # `y` represents how many clock cycles the pulse was high.
-
-    # In order to get both of these values out to the CPU in a single `push`, we truncate
-    # the counts to the first 16 bits worth of data. `in` automatically shifts data over per
-    # invocation, so by the time both of these complete, the `ISR` contains a single 32 bit word
-    # made up of the period and pulse width.
-    in_(x, 16)  # type: ignore
-    in_(y, 16)  # type: ignore
-
-    # Push the contents of the contents of the `ISR` into the `RX FIFO`
-    # Because `noblock` is used, new counts will be written to `RX FIFO` as often as pulses
-    # are detected, and older pulse durations will be overwritten. This gives the CPU the ability
-    # to always get the most recent reading decoupled from how often it's able to pull data.
-    push(noblock)  # type: ignore
-
-    wrap()  # type: ignore
-
-
-@asm_pio(sideset_init=(PIO.OUT_LOW), autopush=True)
+@asm_pio(autopush=True)
 def pulse_properties_pio() -> None:  # pylint: disable=all
     """
     PIO program to measure pulse width and period.
@@ -168,7 +114,7 @@ def pulse_properties_pio() -> None:  # pylint: disable=all
     label("pin_high_again")  # type: ignore
 
     # Point C
-    in_(x, 32)  # type: ignore
+    in_(x, 16)  # type: ignore
 
     # Wait for another falling edge.
 
@@ -179,7 +125,7 @@ def pulse_properties_pio() -> None:  # pylint: disable=all
     jmp(pin, "wait_for_low_2")  # type: ignore
 
     # Point D
-    in_(x, 32)  # type: ignore
+    in_(x, 16)  # type: ignore
 
     wrap()  # type: ignore
 
@@ -218,7 +164,6 @@ def fifo_count_timeout(fifo_callable: "t.Callable[[], int]", timeout_us: int) ->
 
 def measure_pulse_properties(
     data_pin: Pin,
-    debug_pin: Pin,
     state_machine_index: int,
     clock_freq_hz: int = PICO_CLOCK_FREQUENCY_HZ,
 ) -> "t.Callable[[], t.Optional[PulseProperties]]":
@@ -252,7 +197,6 @@ def measure_pulse_properties(
         state_machine_index,
         prog=pulse_properties_pio,
         jmp_pin=data_pin,
-        sideset_base=debug_pin,
         freq=clock_freq_hz,
     )
 
@@ -282,7 +226,7 @@ def measure_pulse_properties(
         NamedTuple. If no pulses occur None will be returned.
         """
 
-        timeout_pulses = MAX_32_BIT_VALUE // 1000
+        timeout_pulses = (MAX_32_BIT_VALUE // 2) // 10000
 
         # TODO: need to convert timeout in US to pulses
         state_machine.put(timeout_pulses)
@@ -294,7 +238,8 @@ def measure_pulse_properties(
         if not words_in_fifo:
             return None
 
-        """
+        packed_value = state_machine.get()
+
         if packed_value == MAX_32_BIT_VALUE:
             return PulseProperties(
                 period_ns=None,
@@ -309,33 +254,27 @@ def measure_pulse_properties(
             )
         
         else:
-        """
 
-        # packed_value = state_machine.get()
-        # c = (packed_value >> 16) & 0xFFFF
-        # d = (packed_value & 0xFFFF)
+            c = ((packed_value >> 16) & 0xFFFF) | (timeout_pulses & 0xFF0000)
+            d = (packed_value & 0xFFFF) | (timeout_pulses & 0xFF0000)
 
-        packed_value = None
-        c = state_machine.get()
-        d = state_machine.get()
+            period_cs = timeout_pulses - d
+            width_cs = c - d
 
-        period_cs = timeout_pulses - d
-        width_cs = c - d
+            try:
+                duty_cycle = width_cs / period_cs
+            except ZeroDivisionError:
+                duty_cycle = None
 
-        try:
-            duty_cycle = width_cs / period_cs
-        except ZeroDivisionError:
-            duty_cycle = None
+            print(
+                f"Packed (hex): {hex(packed_value) if packed_value is not None else ''} // C - Int: {c}, Hex: {hex(c)}, D - Int: {d}, Hex: {hex(d)}. Duty Cycle: {duty_cycle}"
+            )
 
-        print(
-            f"Packed (hex): {hex(packed_value) if packed_value is not None else ''} // C - Int: {c}, Hex: {hex(c)}, D - Int: {d}, Hex: {hex(d)}. Duty Cycle: {duty_cycle}"
-        )
-
-        return PulseProperties(
-            period_ns=cycles_to_periods_ns(period_cs),
-            width_ns=cycles_to_periods_ns(width_cs),
-            duty_cycle=duty_cycle,
-        )
+            return PulseProperties(
+                period_ns=cycles_to_periods_ns(period_cs),
+                width_ns=cycles_to_periods_ns(width_cs),
+                duty_cycle=duty_cycle,
+            )
 
     return measure
 
@@ -366,7 +305,7 @@ def main() -> None:
     # pwm.freq(int(f_base))
 
     latest_properties = measure_pulse_properties(
-        data_pin=Pin(0), debug_pin=Pin(1, Pin.OUT), state_machine_index=0
+        data_pin=Pin(0), state_machine_index=0
     )
 
     while True:
