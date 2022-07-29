@@ -285,6 +285,62 @@ def measure_pulse_properties(
     return measure
 
 
+@asm_pio(set_init=(PIO.OUT_LOW,), fifo_join=PIO.JOIN_TX)
+def slow_square_pio() -> None:  # pylint: disable=all
+    """
+
+    :return: None
+    """
+
+    pull(block)  # type: ignore
+    mov(x, osr)  # type: ignore
+
+    wrap_target()  # type: ignore
+
+    pull(noblock)  # type: ignore
+    mov(x, osr)  # type: ignore
+
+    mov(y, osr)  # type: ignore
+    label("high_side_wait")  # type: ignore
+    set(pins, 1)  # type: ignore
+    jmp(y_dec, "high_side_wait")  # type: ignore
+
+    mov(y, osr)  # type: ignore
+    label("low_side_wait")  # type: ignore
+    set(pins, 0)  # type: ignore
+    jmp(y_dec, "low_side_wait")  # type: ignore
+
+    wrap()  # type: ignore
+
+
+def square_waver(
+    output_pin: Pin,
+    state_machine_index: int,
+) -> "t.Callable[[int], None]":
+    """
+
+    :param output_pin:
+    :param state_machine_index:
+    :return:
+    """
+
+    state_machine = rp2.StateMachine(
+        state_machine_index, prog=slow_square_pio, set_base=output_pin, freq=50_000
+    )
+
+    state_machine.active(1)
+
+    def change_frequency(t: int) -> None:
+        """
+
+        :param t:
+        :return:
+        """
+        state_machine.put(t - 2)
+
+    return change_frequency
+
+
 def main_properties() -> None:
     """
     Entrypoint. Prints pulse duration periodically.
@@ -305,31 +361,47 @@ def main() -> None:
     :return: None
     """
 
-    pin = Pin(1, Pin.OUT)  # create a PWM object on a pin
-
     latest_properties = measure_pulse_properties(data_pin=Pin(0), state_machine_index=0)
+    change_frequency = square_waver(output_pin=Pin(1), state_machine_index=7)
 
-    timer = Timer()
-
-    previous_duty = None
+    hz_100_side_length = 125
 
     while True:
 
         duty = latest_properties().duty_cycle
+        counts = int(hz_100_side_length - 50 * ((duty) + 0.1))
 
-        if duty != previous_duty:
+        print(f"Writing counts: {counts}, duty: {duty}")
 
-            utime.sleep(1)
+        change_frequency(counts)
 
-            timer.deinit()
 
-            output_period_ms = int(10 + 10 * duty)
+def main_test() -> None:
+    """
 
-            previous_duty = duty
+    :return:
+    """
 
-            print(f"Input PWM: {duty}, Output Frequency: {output_period_ms}")
+    state_machine = rp2.StateMachine(
+        1, prog=slow_square_pio, set_base=Pin(1), sideset_base=Pin(2), freq=50_000
+    )
 
-            timer.init(period=output_period_ms, callback=lambda tim: pin.toggle())
+    state_machine.active(1)
+
+    hz_100_side_length = 125
+    hz_1250_side_length = 10
+
+    while True:
+
+        for target_side_length in range(hz_1250_side_length, hz_100_side_length + 23, 23):
+            print(f"Writing: {target_side_length}")
+            input_value = target_side_length - 2
+            state_machine.put(input_value)
+
+        for target_side_length in range(hz_100_side_length - 23, hz_1250_side_length, -23):
+            print(f"Writing: {target_side_length}")
+            input_value = target_side_length - 2
+            state_machine.put(input_value)
 
 
 if __name__ == "__main__":
