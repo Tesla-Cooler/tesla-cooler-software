@@ -39,10 +39,10 @@ PICO_CLOCK_FREQUENCY_HZ = int(1.25e8)
 PulseProperties = namedtuple(
     "PulseProperties",
     [
-        # The pulse's period (time from rising edge to rising edge) in Nanoseconds as a float.
-        "period_ns",
-        # The duration of the high side of the pulse in Nanoseconds as a float.
-        "width_ns",
+        # The pulse's period (time from rising edge to rising edge) in microseconds as a float.
+        "period_us",
+        # The duration of the high side of the pulse in microseconds as a float.
+        "width_us",
         # Pulse's width / pulse's period. If the period is 0, or any other divide by zero situation
         # occurs, this value will be None, otherwise it will be a float.
         "duty_cycle",
@@ -67,6 +67,7 @@ def pulse_properties_pio() -> None:  # pylint: disable=all
     wrap_target()  # type: ignore
 
     # Load the OSR from the CPU
+    # TODO: We can use the X default trick here so we don't have to always block.
     pull(block)  # type: ignore
 
     # Copy the value in the OSR to y
@@ -209,12 +210,12 @@ def measure_pulse_properties(
 
     state_machine.active(1)
 
-    def cycles_to_periods_ns(cycles: float) -> float:
+    def cycles_to_periods_us(cycles: float) -> float:
         """
         Converts the number of clock cycles as returned by the PIO to the period elapsed in
-        Nanoseconds.
+        microseconds.
         :param cycles: Number of cycles.
-        :return: Period in Nanoseconds.
+        :return: Period in microseconds.
         """
 
         return cycles * clock_period_microseconds * 2
@@ -251,14 +252,14 @@ def measure_pulse_properties(
 
         if packed_value == MAX_32_BIT_VALUE:
             return PulseProperties(
-                period_ns=None,
-                width_ns=None,
+                period_us=None,
+                width_us=None,
                 duty_cycle=0,
             )
         elif packed_value == timeout_pulses:
             return PulseProperties(
-                period_ns=None,
-                width_ns=None,
+                period_us=None,
+                width_us=None,
                 duty_cycle=1,
             )
 
@@ -277,8 +278,8 @@ def measure_pulse_properties(
                 duty_cycle = None
 
             return PulseProperties(
-                period_ns=cycles_to_periods_ns(period_cs),
-                width_ns=cycles_to_periods_ns(width_cs),
+                period_us=cycles_to_periods_us(period_cs),
+                width_us=cycles_to_periods_us(width_cs),
                 duty_cycle=duty_cycle,
             )
 
@@ -341,7 +342,7 @@ def square_waver(
     return change_frequency
 
 
-def main_properties() -> None:
+def main() -> None:
     """
     Entrypoint. Prints pulse duration periodically.
     :return: None
@@ -351,11 +352,19 @@ def main_properties() -> None:
 
     while True:
 
-        print(f"Properties: {latest_properties()}")
+        properties = latest_properties()
+
+        period_seconds = properties.period_us * 1 * 10e-7
+        frequency_khz = (1 / period_seconds) * 0.001
+
+        print(
+            f"Period (us): {'{:.10f}'.format(properties.period_us)}, Frequency (kHz): {'{:.10f}'.format(frequency_khz)}, Duty Cycle: {'{:.10f}'.format(properties.duty_cycle)}%"
+        )
+
         utime.sleep(0.1)
 
 
-def main() -> None:
+def main_poc() -> None:
     """
     Entrypoint. Prints pulse duration periodically.
     :return: None
