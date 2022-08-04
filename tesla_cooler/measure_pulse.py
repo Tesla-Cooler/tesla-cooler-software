@@ -46,11 +46,30 @@ PulseProperties = namedtuple(
         # Pulse's width / pulse's period. If the period is 0, or any other divide by zero situation
         # occurs, this value will be None, otherwise it will be a float.
         "duty_cycle",
+        # C-Point Clock Cycles, consumed by debugging and will be removed.
+        "c_cs",
+        # D-Point Clock Cycles, consumed by debugging and will be removed.
+        "d_cs",
     ],
 )
 
 
-@asm_pio(autopush=False)
+def pprint_pulse_properties(pulse_properties: PulseProperties) -> None:
+    """
+
+    :param pulse_properties:
+    :return:
+    """
+
+    period_seconds = pulse_properties.period_us * 1 * 10e-7
+    frequency_khz = (1 / period_seconds) * 0.001
+
+    print(
+        f"C-CS: {hex(pulse_properties.c_cs)}, D-CS: {hex(pulse_properties.d_cs)}, Period (us): {'{:.10f}'.format(pulse_properties.period_us)}, Frequency (kHz): {'{:.10f}'.format(frequency_khz)}, Duty Cycle: {'{:.10f}'.format(pulse_properties.duty_cycle)}%"
+    )
+
+
+@asm_pio(autopush=False, sideset_init=rp2.PIO.OUT_LOW)
 def pulse_properties_pio() -> None:  # pylint: disable=all
     """
     PIO program to measure pulse width and period.
@@ -64,76 +83,91 @@ def pulse_properties_pio() -> None:  # pylint: disable=all
     # Set the pin as an input
     set(pindirs, 0)  # type: ignore
 
+    # Block forever until the CPU sets the timeout count
+    pull(block)  # type: ignore
+    mov(x, osr)  # type: ignore
+
     wrap_target()  # type: ignore
 
-    # Load the OSR from the CPU
-    # TODO: We can use the X default trick here so we don't have to always block.
-    pull(block)  # type: ignore
-
-    # Copy the value in the OSR to y
-    mov(y, osr)  # type: ignore
+    pull(noblock)  # type: ignore
+    mov(x, osr)  # type: ignore
 
     # Set the value in y (so the value from the OSR) as the initial value for x.
     # This is to be able to time out, not to actually count the values.
-    mov(x, y)  # type: ignore
+    mov(y, x)  # type: ignore
 
     # Pin's value is currently unknown.
     # We wait for the pin's value to be high.
 
     label("init_pin_low")  # type: ignore
     jmp(pin, "init_pin_high")  # type: ignore
-    jmp(x_dec, "init_pin_low")  # type: ignore
-    in_(x, 32)  # type: ignore
+    jmp(y_dec, "init_pin_low")  # type: ignore
+    # If this is reached, it means we've timed out waiting for it to go high.
+    # Write the 0xFFFFFFFF value to the ISR
+    in_(y, 32)  # type: ignore
     jmp("write_output")  # type: ignore
     label("init_pin_high")  # type: ignore
 
     # The pin has become high, or it started out as high.
 
     # Reset the timeout counter to the value given by user, which is stored in `y`.
-    mov(x, y)  # type: ignore
+    mov(y, x)  # type: ignore
 
     # Wait for a falling edge.
 
-    label("wait_for_low")  # type: ignore
-    jmp(x_dec, "x_decremented")  # type: ignore
-    in_(y, 32)  # type: ignore
-    jmp("write_output")  # type: ignore
+    # Wait for another falling edge, pin is currently high
     label("x_decremented")  # type: ignore
     jmp(pin, "wait_for_low")  # type: ignore
+    jmp("falling_edge")  # type: ignore
+
+    label("wait_for_low")  # type: ignore
+    jmp(y_dec, "x_decremented")  # type: ignore
+    # If this is reached, it means we've timed out waiting for it to go low again.
+    # Write the input timeout count to the ISR
+    in_(x, 32)  # type: ignore
+    jmp("write_output")  # type: ignore
+    label("falling_edge")  # type: ignore
 
     # Falling edge has occurred. Start the countdown timer.
+    # From here on we will actually be measuring the waveform.
 
     # Reset the timeout counter to the value given by user, which is stored in `y`.
     # Point B
-    mov(x, y)  # type: ignore
+    mov(y, x).side(1)  # type: ignore
 
     # Wait for a rising edge.
 
     # Wait around until pin goes high again, decrementing `x` for each count it isn't high.
     label("pin_still_low")  # type: ignore
     jmp(pin, "pin_high_again")  # type: ignore
-    jmp(x_dec, "pin_still_low")  # type: ignore
-    in_(x, 32)  # type: ignore
+    jmp(y_dec, "pin_still_low")  # type: ignore
+    # If this is reached, it means we've timed out waiting for it to go high.
+    # Write the 0xFFFFFFFF value to the ISR
+    in_(y, 32)  # type: ignore
     jmp("write_output")  # type: ignore
     label("pin_high_again")  # type: ignore
 
     # Point C
-    in_(x, 16)  # type: ignore
+    in_(y, 16)  # type: ignore
 
-    # Wait for another falling edge.
-
-    label("wait_for_low_2")  # type: ignore
-    jmp(x_dec, "x_decremented_2")  # type: ignore
-    in_(y, 32)  # type: ignore
-    jmp("write_output")  # type: ignore
+    # Wait for another falling edge, pin is currently high
     label("x_decremented_2")  # type: ignore
     jmp(pin, "wait_for_low_2")  # type: ignore
+    jmp("falling_edge_2")  # type: ignore
+
+    label("wait_for_low_2")  # type: ignore
+    jmp(y_dec, "x_decremented_2")  # type: ignore
+    # If this is reached, it means we've timed out waiting for it to go low again.
+    # Write the input timeout count to the ISR
+    in_(x, 32)  # type: ignore
+    jmp("write_output")  # type: ignore
+    label("falling_edge_2")  # type: ignore
 
     # Point D
-    in_(x, 16)  # type: ignore
+    in_(y, 16).side(0)  # type: ignore
 
     label("write_output")  # type: ignore
-    push(noblock)  # type: ignore
+    push(block)  # type: ignore
 
     wrap()  # type: ignore
 
@@ -205,6 +239,7 @@ def measure_pulse_properties(
         state_machine_index,
         prog=pulse_properties_pio,
         jmp_pin=data_pin,
+        sideset_base=Pin(2),
         freq=clock_freq_hz,
     )
 
@@ -255,12 +290,16 @@ def measure_pulse_properties(
                 period_us=None,
                 width_us=None,
                 duty_cycle=0,
+                c_cs=None,
+                d_cs=None,
             )
         elif packed_value == timeout_pulses:
             return PulseProperties(
                 period_us=None,
                 width_us=None,
                 duty_cycle=1,
+                c_cs=None,
+                d_cs=None,
             )
 
         else:
@@ -281,6 +320,8 @@ def measure_pulse_properties(
                 period_us=cycles_to_periods_us(period_cs),
                 width_us=cycles_to_periods_us(width_cs),
                 duty_cycle=duty_cycle,
+                c_cs=c_point_clock_cycles,
+                d_cs=d_point_clock_cycles,
             )
 
     return measure
@@ -351,16 +392,7 @@ def main() -> None:
     latest_properties = measure_pulse_properties(data_pin=Pin(0, Pin.IN), state_machine_index=0)
 
     while True:
-
-        properties = latest_properties()
-
-        period_seconds = properties.period_us * 1 * 10e-7
-        frequency_khz = (1 / period_seconds) * 0.001
-
-        print(
-            f"Period (us): {'{:.10f}'.format(properties.period_us)}, Frequency (kHz): {'{:.10f}'.format(frequency_khz)}, Duty Cycle: {'{:.10f}'.format(properties.duty_cycle)}%"
-        )
-
+        pprint_pulse_properties(latest_properties())
         utime.sleep(0.1)
 
 
