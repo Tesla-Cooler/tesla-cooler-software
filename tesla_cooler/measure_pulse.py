@@ -4,6 +4,9 @@ Use PIO to measure properties of square waves.
 Adapted from a post by `danjperrorn` on the micropython forum:
     https://forum.micropython.org/viewtopic.php?f=21&t=9895#p55342
 
+The following represents the different parts of a square waveform that are measured with this
+program. Note that the 'timer' always starts at point 'b', because we only measure one pulse at a
+time.
 
     a      b      c     d
      ******       ******
@@ -56,9 +59,18 @@ PulseProperties = namedtuple(
     ],
 )
 
-PIOOutput = namedtuple(
-    "PIOOutput",
-    ["c_clock_cycles", "d_clock_cycles", "duty_cycle_override"],
+OutputPIO = namedtuple(
+    "OutputPIO",
+    [
+        # These two values represent the number of clock cycles it took to reach the point in the
+        # waveform as labeled by the comment at the top of the document.
+        "c_clock_cycles",
+        "d_clock_cycles",
+        # If the PIO detects either a 100% duty cycle waveform, or a 0% duty cycle waveform, there
+        # can be no valid values for c/d clock cycles. If either of these cases, this field will
+        # be set to 1/0 respectively (w/ the other two  field set to None), otherwise None.
+        "duty_cycle_override",
+    ],
 )
 
 
@@ -76,7 +88,7 @@ def pprint_pulse_properties(pulse_properties: PulseProperties) -> str:
 
 
 @asm_pio(autopush=True, sideset_init=rp2.PIO.OUT_LOW)
-def pulse_properties_pio_rolling() -> None:  # pylint: disable=all
+def pulse_properties_pio_rolling_16bit() -> None:  # pylint: disable=all
     """
     PIO program to measure pulse width and period.
     Width and period are truncated to 16 bits, packed into RX FIFO, and shifted out in a single
@@ -176,7 +188,7 @@ def pulse_properties_pio_rolling() -> None:  # pylint: disable=all
 
 
 @asm_pio(sideset_init=rp2.PIO.OUT_LOW)
-def pulse_properties_pio_blocking() -> None:  # pylint: disable=all
+def pulse_properties_pio_blocking_32bit() -> None:  # pylint: disable=all
     """
     PIO program to measure pulse width and period.
     Width and period are truncated to 16 bits, packed into RX FIFO, and shifted out in a single
@@ -311,11 +323,11 @@ def fifo_count_timeout(
 
 def read_pio_rolling_16bit(
     state_machine: rp2.StateMachine, timeout_us: int, timeout_pulses: int
-) -> t.Optional[PIOOutput]:
+) -> t.Optional[OutputPIO]:
     """
     Read the rx_fifo of a given state machine, convert the resulting values to c/d clock cycle
     values to eventually be converted to period/duty cycle.
-    This should only be used in conjunction with PIOs running `pulse_properties_pio_rolling`.
+    This should only be used in conjunction with PIOs running `pulse_properties_pio_rolling_16bit`.
     :param state_machine: To read.
     :param timeout_us: Amount of time in microseconds to wait for values to arrive.
     :param timeout_pulses: The timeout in clock cycles.
@@ -342,15 +354,20 @@ def read_pio_rolling_16bit(
 
         output = c_point_clock_cycles, d_point_clock_cycles, None
 
-    return PIOOutput(*output)
+    return OutputPIO(*output)
 
 
 def read_pio_blocking_32bit(
     state_machine: rp2.StateMachine, timeout_us: int, timeout_pulses: int
-) -> t.Optional[PIOOutput]:
+) -> t.Optional[OutputPIO]:
     """
-
-    :return:
+    Read the rx_fifo of a given state machine, convert the resulting values to c/d clock cycle
+    values to eventually be converted to period/duty cycle.
+    This should only be used in conjunction with PIOs running `pulse_properties_pio_blocking_32bit`.
+    :param state_machine: To read.
+    :param timeout_us: Amount of time in microseconds to wait for values to arrive.
+    :param timeout_pulses: The timeout in clock cycles.
+    :return: None if no values arrive in the `rx_fifo`, an NT containing the read result
     """
 
     words_in_fifo = fifo_count_timeout(fifo_callable=state_machine.rx_fifo, timeout_us=timeout_us)
@@ -365,13 +382,13 @@ def read_pio_blocking_32bit(
         value = state_machine.get()
 
         if value == MAX_32_BIT_VALUE:
-            return PIOOutput(None, None, 0)
+            return OutputPIO(None, None, 0)
         elif value == timeout_pulses:
-            return PIOOutput(None, None, 1)
+            return OutputPIO(None, None, 1)
 
         output.append(value)
 
-    return PIOOutput(*list(output + [None]))
+    return OutputPIO(*list(output + [None]))
 
 
 def measure_pulse_properties(
@@ -408,18 +425,18 @@ def measure_pulse_properties(
     clock_period_seconds = 1 / clock_freq_hz
     clock_period_microseconds = clock_period_seconds / 1e-6
 
+    prog, pio_read_function = (
+        (pulse_properties_pio_rolling_16bit, read_pio_rolling_16bit)
+        if rolling_average_approach
+        else (pulse_properties_pio_blocking_32bit, read_pio_blocking_32bit)
+    )
+
     state_machine = rp2.StateMachine(
         state_machine_index,
-        prog=pulse_properties_pio_rolling
-        if rolling_average_approach
-        else pulse_properties_pio_blocking,
+        prog=prog,
         jmp_pin=data_pin,
         sideset_base=Pin(2),
         freq=clock_freq_hz,
-    )
-
-    pio_read_function = (
-        read_pio_rolling_16bit if rolling_average_approach else read_pio_blocking_32bit
     )
 
     state_machine.active(1)
