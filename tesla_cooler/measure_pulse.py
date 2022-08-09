@@ -58,11 +58,7 @@ PulseProperties = namedtuple(
 
 PIOOutput = namedtuple(
     "PIOOutput",
-    [
-        "c_clock_cycles",
-        "d_clock_cycles",
-        "duty_cycle_override"
-    ],
+    ["c_clock_cycles", "d_clock_cycles", "duty_cycle_override"],
 )
 
 
@@ -414,16 +410,16 @@ def measure_pulse_properties(
 
     state_machine = rp2.StateMachine(
         state_machine_index,
-        prog=pulse_properties_pio_rolling if rolling_average_approach else pulse_properties_pio_blocking,
+        prog=pulse_properties_pio_rolling
+        if rolling_average_approach
+        else pulse_properties_pio_blocking,
         jmp_pin=data_pin,
         sideset_base=Pin(2),
         freq=clock_freq_hz,
     )
 
     pio_read_function = (
-        read_pio_rolling_16bit
-        if rolling_average_approach
-        else read_pio_blocking_32bit
+        read_pio_rolling_16bit if rolling_average_approach else read_pio_blocking_32bit
     )
 
     state_machine.active(1)
