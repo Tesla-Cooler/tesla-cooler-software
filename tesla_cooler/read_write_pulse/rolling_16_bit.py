@@ -1,12 +1,15 @@
+"""
+PIO/Python interface for the 16bit/rolling reads approach pulse measurement.
+"""
+
 import rp2
 from rp2 import asm_pio
 
 try:
     import typing as t
-    from collections import namedtuple
 except ImportError:
     # we're probably on the pico if this occurs.
-    from ucollections import namedtuple  # type: ignore
+    pass
 
 from tesla_cooler.read_write_pulse.pulse_common import (
     MAX_32_BIT_VALUE,
@@ -16,13 +19,14 @@ from tesla_cooler.read_write_pulse.pulse_common import (
 
 
 @asm_pio(autopush=True, sideset_init=rp2.PIO.OUT_LOW)
-def pulse_properties_pio_rolling_16bit() -> None:  # pylint: disable=all
+def pulse_properties_pio_rolling_16bit() -> None:
     """
     PIO program to measure pulse width and period.
     Width and period are truncated to 16 bits, packed into RX FIFO, and shifted out in a single
     operation.
     :return: None
     """
+    # pylint: disable=undefined-variable
 
     # Set the pin as an input
     set(pindirs, 0)  # type: ignore

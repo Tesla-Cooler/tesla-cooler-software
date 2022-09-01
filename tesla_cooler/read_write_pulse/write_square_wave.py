@@ -1,21 +1,26 @@
+"""
+Pio/Python interface for generating 'slow' square waves. Can go slower than the rp2040's PWM
+interface.
+"""
+
 import rp2
-from machine import Pin, mem32
+from machine import Pin
 from rp2 import PIO, asm_pio
 
 try:
-    import typing as t
-    from collections import namedtuple
+    import typing as t  # pylint: disable=unused-import
 except ImportError:
     # we're probably on the pico if this occurs.
-    from ucollections import namedtuple  # type: ignore
+    pass
 
 
 @asm_pio(set_init=(PIO.OUT_LOW,), fifo_join=PIO.JOIN_TX)
-def slow_square_pio() -> None:  # pylint: disable=all
+def slow_square_pio() -> None:
     """
 
     :return: None
     """
+    # pylint: disable=undefined-variable
 
     pull(block)  # type: ignore
     mov(x, osr)  # type: ignore
@@ -55,12 +60,12 @@ def square_waver(
 
     state_machine.active(1)
 
-    def change_frequency(t: int) -> None:
+    def change_frequency(frequency: int) -> None:
         """
 
-        :param t:
+        :param frequency:
         :return:
         """
-        state_machine.put(t - 2)
+        state_machine.put(frequency - 2)
 
     return change_frequency

@@ -1,7 +1,10 @@
+"""
+PIO/Python interface for the 32bit/blocking reads approach pulse measurement.
+"""
+
+
 import rp2
-import utime
-from machine import Pin, mem32
-from rp2 import PIO, asm_pio
+from rp2 import asm_pio
 
 from tesla_cooler.read_write_pulse.pulse_common import (
     MAX_32_BIT_VALUE,
@@ -10,21 +13,21 @@ from tesla_cooler.read_write_pulse.pulse_common import (
 )
 
 try:
-    import typing as t
-    from collections import namedtuple
+    import typing as t  # pylint: disable=unused-import
 except ImportError:
     # we're probably on the pico if this occurs.
-    from ucollections import namedtuple  # type: ignore
+    pass
 
 
 @asm_pio(sideset_init=rp2.PIO.OUT_LOW)
-def pulse_properties_pio_blocking_32bit() -> None:  # pylint: disable=all
+def pulse_properties_pio_blocking_32bit() -> None:
     """
     PIO program to measure pulse width and period.
     Width and period are truncated to 16 bits, packed into RX FIFO, and shifted out in a single
     operation.
     :return: None
     """
+    # pylint: disable=undefined-variable
 
     # Set the pin as an input
     set(pindirs, 0)  # type: ignore
@@ -118,7 +121,7 @@ def pulse_properties_pio_blocking_32bit() -> None:  # pylint: disable=all
 
 def read_pio_blocking_32bit(
     state_machine: rp2.StateMachine, timeout_us: int, timeout_pulses: int
-) -> t.Optional[OutputPIO]:
+) -> "t.Optional[OutputPIO]":
     """
     Read the rx_fifo of a given state machine, convert the resulting values to c/d clock cycle
     values to eventually be converted to period/duty cycle.
