@@ -2,12 +2,12 @@
 Entry point for development.
 """
 
-from tesla_cooler import measure_pulse
+from tesla_cooler import read_write_pulse
 
 
-def test() -> None:
+def main() -> None:
     """
     Run what we're testing.
     :return: None
     """
-    measure_pulse.main()
+    read_write_pulse.main()

@@ -11,4 +11,4 @@ source ./venv/bin/activate
 
 export PYTHONPATH="./tesla_cooler:./test${PYTHONPATH+:}${PYTHONPATH:-}"
 
-pylint main.py tesla_cooler test
+pylint *.py tesla_cooler test
