@@ -147,7 +147,7 @@ def read_pio_rolling_16bit(
     else:
 
         # TODO: why do I have to do this mask?
-        c_point_clock_cycles = ((packed_value >> 16) & 0xFFFF) | (timeout_pulses & 0xFF0000) - 2
+        c_point_clock_cycles = ((packed_value >> 16) & 0xFFFF) | (timeout_pulses & 0xFF0000)
         d_point_clock_cycles = (packed_value & 0xFFFF) | (timeout_pulses & 0xFF0000)
 
         output = c_point_clock_cycles, d_point_clock_cycles, None
