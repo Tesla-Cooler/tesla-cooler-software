@@ -80,12 +80,12 @@ def pprint_pulse_properties(pulse_properties: PulseProperties) -> str:
 
     c_cs = hex(pulse_properties.c_cs)
     d_cs = hex(pulse_properties.d_cs)
-    period = "{:.10f}".format(pulse_properties.period_us)
-    frequency = "{:.10f}".format(frequency_khz)
-    duty_cycle = "{:.10f}".format(pulse_properties.duty_cycle)
+    period = "{:.5f}".format(pulse_properties.period_us)
+    frequency = "{:.5f}".format(frequency_khz)
+    duty_cycle = "{:.2f}".format(pulse_properties.duty_cycle)
 
     return (
-        f"C-CS: {c_cs}, D-CS: {d_cs}, Period (us): {period}"
+        f"C-CS: {c_cs}, D-CS: {d_cs}, Period (us): {period} "
         + f"Frequency (kHz): {frequency}, Duty Cycle: {duty_cycle}%"
     )
 
@@ -93,7 +93,7 @@ def pprint_pulse_properties(pulse_properties: PulseProperties) -> str:
 def measure_pulse_properties(
     data_pin: Pin,
     state_machine_index: int,
-    clock_freq_hz: int = PICO_CLOCK_FREQUENCY_HZ // 2,
+    clock_freq_hz: int = PICO_CLOCK_FREQUENCY_HZ,
     rolling_average_approach: bool = False,
 ) -> "t.Callable[[], t.Optional[PulseProperties]]":
     """
@@ -134,7 +134,7 @@ def measure_pulse_properties(
         state_machine_index,
         prog=prog,
         jmp_pin=data_pin,
-        sideset_base=Pin(2),
+        sideset_base=Pin(1),
         freq=clock_freq_hz,
     )
 
@@ -228,56 +228,7 @@ def main() -> None:
         if properties is not None:
             pretty = pprint_pulse_properties(properties)
             print(f"Rolling Avg. Approach: {rolling_average_approach} - {pretty}")
-            utime.sleep(0.01)
-
-
-def main_poc() -> None:
-    """
-    Entrypoint. Prints pulse duration periodically.
-    :return: None
-    """
-
-    latest_properties = measure_pulse_properties(data_pin=Pin(0), state_machine_index=0)
-    change_frequency = square_waver(output_pin=Pin(1), state_machine_index=7)
-
-    hz_100_side_length = 125
-
-    while True:
-
-        duty = latest_properties().duty_cycle
-        counts = int(hz_100_side_length - 50 * ((duty) + 0.1))
-
-        print(f"Writing counts: {counts}, duty: {duty}")
-
-        change_frequency(counts)
-
-
-def main_test() -> None:
-    """
-
-    :return:
-    """
-
-    state_machine = rp2.StateMachine(
-        1, prog=slow_square_pio, set_base=Pin(1), sideset_base=Pin(2), freq=50_000
-    )
-
-    state_machine.active(1)
-
-    hz_100_side_length = 125
-    hz_1250_side_length = 10
-
-    while True:
-
-        for target_side_length in range(hz_1250_side_length, hz_100_side_length + 23, 23):
-            print(f"Writing: {target_side_length}")
-            input_value = target_side_length - 2
-            state_machine.put(input_value)
-
-        for target_side_length in range(hz_100_side_length - 23, hz_1250_side_length, -23):
-            print(f"Writing: {target_side_length}")
-            input_value = target_side_length - 2
-            state_machine.put(input_value)
+            utime.sleep(0.025)
 
 
 if __name__ == "__main__":

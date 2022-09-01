@@ -19,8 +19,69 @@ except ImportError:
     pass
 
 
-@asm_pio(sideset_init=rp2.PIO.OUT_LOW)
+@asm_pio(sideset_init=(rp2.PIO.OUT_LOW, rp2.PIO.OUT_LOW))
 def pulse_properties_pio_blocking_32bit() -> None:
+    """
+    PIO program to measure pulse width and period.
+    Width and period are truncated to 16 bits, packed into RX FIFO, and shifted out in a single
+    operation.
+    :return: None
+    """
+    # pylint: disable=undefined-variable
+
+    # Set the pin as an input
+    set(pindirs, 0)  # type: ignore
+
+    wrap_target()  # type: ignore
+
+    # Block forever until the CPU sets the timeout count
+    pull(block)  # type: ignore
+    mov(x, osr)  # type: ignore
+
+    # Set the value in y (so the value from the OSR) as the initial value for x.
+    # This is to be able to time out, not to actually count the values.
+    mov(y, x)  # type: ignore
+
+    # Pin's value is currently unknown.
+    # We wait for the pin's value to be high.
+
+    wait(1, pin, 0).side(0b00)  # pin 0 goes high when the input signal goes high for the first time
+    wait(0, pin, 0).side(0b01)  # pin 0 goes low
+
+    # Falling edge has occurred. Start the countdown timer.
+    # From here on we will actually be measuring the waveform.
+
+    # Wait for a rising edge.
+    # Wait around until pin goes high again, decrementing `x` for each count it isn't high.
+    label("pin_still_low")  # type: ignore
+    jmp(pin, "pin_high_again")  # type: ignore
+    jmp(y_dec, "pin_still_low")  # type: ignore
+    label("pin_high_again")  # type: ignore
+
+    # Point C
+    in_(y, 32).side(0b10)  # type: ignore
+    push(noblock)  # type: ignore
+
+    # Wait for another falling edge, pin is currently high
+    label("post_decrement")  # type: ignore
+    jmp(pin, "pin_high_decrement")  # type: ignore
+    jmp("pin_low_fall_through")  # type: ignore
+
+    label("pin_high_decrement")  # type: ignore
+    jmp(y_dec, "post_decrement")  # type: ignore
+    label("pin_low_fall_through")  # type: ignore
+
+    # Point D
+    in_(y, 32).side(0b00)  # type: ignore
+
+    label("write_output")  # type: ignore
+    push(noblock)  # type: ignore
+
+    wrap()  # type: ignore
+
+
+@asm_pio(sideset_init=(rp2.PIO.OUT_LOW,))
+def pulse_properties_pio_blocking_32bit_old() -> None:
     """
     PIO program to measure pulse width and period.
     Width and period are truncated to 16 bits, packed into RX FIFO, and shifted out in a single
@@ -95,7 +156,7 @@ def pulse_properties_pio_blocking_32bit() -> None:
 
     # Point C
     in_(y, 32)  # type: ignore
-    push(block)  # type: ignore
+    push(noblock)  # type: ignore
 
     # Wait for another falling edge, pin is currently high
     label("x_decremented_2")  # type: ignore
@@ -114,7 +175,7 @@ def pulse_properties_pio_blocking_32bit() -> None:
     in_(y, 32)  # type: ignore
 
     label("write_output")  # type: ignore
-    push(block)  # type: ignore
+    push(noblock)  # type: ignore
 
     wrap()  # type: ignore
 
