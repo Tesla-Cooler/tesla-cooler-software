@@ -8,15 +8,18 @@ The following represents the different parts of a square waveform that are measu
 program. Note that the 'timer' always starts at point 'b', because we only measure one pulse at a
 time.
 
+            ----- Timer starts here.
+           |
+           |
     a      b      c     d
      ******       ******
-     *    *       *    *
+     ^    *       ^    *
 ******    *********    ******
 
 
     a      b      c     d
 ***********       ******
-          *       *    *
+          *       ^    *
           *********    ******
 
 """
@@ -29,7 +32,7 @@ from tesla_cooler.read_write_pulse.blocking_32_bit import (
     pulse_properties_pio_blocking_32bit,
     read_pio_blocking_32bit,
 )
-from tesla_cooler.read_write_pulse.pulse_common import MAX_32_BIT_VALUE
+from tesla_cooler.read_write_pulse.pulse_common import MAX_32_BIT_VALUE, PulseProperties
 from tesla_cooler.read_write_pulse.rolling_16_bit import (
     pulse_properties_pio_rolling_16bit,
     read_pio_rolling_16bit,
@@ -50,23 +53,6 @@ _PIO0_BASE = 0x50200000
 _INPUT_SYNC_BYPASS_OFFSET = 0x038
 INPUT_SYNC_ENABLE_ADDRESS = _PIO0_BASE | _INPUT_SYNC_BYPASS_OFFSET
 
-PulseProperties = namedtuple(
-    "PulseProperties",
-    [
-        # The pulse's period (time from rising edge to rising edge) in microseconds as a float.
-        "period_us",
-        # The duration of the high side of the pulse in microseconds as a float.
-        "width_us",
-        # Pulse's width / pulse's period. If the period is 0, or any other divide by zero situation
-        # occurs, this value will be None, otherwise it will be a float.
-        "duty_cycle",
-        # C-Point Clock Cycles, consumed by debugging and will be removed.
-        "c_cs",
-        # D-Point Clock Cycles, consumed by debugging and will be removed.
-        "d_cs",
-    ],
-)
-
 
 def pprint_pulse_properties(pulse_properties: PulseProperties) -> str:
     """
@@ -75,14 +61,14 @@ def pprint_pulse_properties(pulse_properties: PulseProperties) -> str:
     :return:
     """
 
-    period_seconds = pulse_properties.period_us * 1 * 10e-7
-    frequency_khz = (1 / period_seconds) * 0.001
+    period_seconds = pulse_properties.period_us * 1 * 10e-7 if pulse_properties.period_us is not None else None
+    frequency_khz = (1 / period_seconds) * 0.001 if period_seconds is not None else None
 
-    c_cs = hex(pulse_properties.c_cs)
-    d_cs = hex(pulse_properties.d_cs)
-    period = "{:.5f}".format(pulse_properties.period_us)
-    frequency = "{:.5f}".format(frequency_khz)
-    duty_cycle = "{:.2f}".format(pulse_properties.duty_cycle)
+    c_cs = int(pulse_properties.c_cs) if pulse_properties.c_cs is not None else None
+    d_cs = int(pulse_properties.d_cs) if pulse_properties.d_cs is not None else None
+    period = "{:.5f}".format(pulse_properties.period_us) if pulse_properties.period_us is not None else None
+    frequency = "{:.5f}".format(frequency_khz) if frequency_khz is not None else None
+    duty_cycle = "{:.10f}".format(pulse_properties.duty_cycle) if pulse_properties.duty_cycle is not None else None
 
     return (
         f"C-CS: {c_cs}, D-CS: {d_cs}, Period (us): {period} "
@@ -140,17 +126,6 @@ def measure_pulse_properties(
 
     state_machine.active(1)
 
-    def cycles_to_periods_us(cycles: float) -> float:
-        """
-        Converts the number of clock cycles as returned by the PIO to the period elapsed in
-        microseconds. We multiply the output by 2 because it takes two clock cycles to decrement
-        the counter, and then `jmp` based on the pin's value.
-        :param cycles: Number of cycles.
-        :return: Period in microseconds.
-        """
-
-        return cycles * clock_period_microseconds * 2
-
     def measure(
         timeout_us: int = 10000,
     ) -> "t.Optional[PulseProperties]":
@@ -170,38 +145,11 @@ def measure_pulse_properties(
         # TODO: need to convert timeout in US to pulses
         state_machine.put(timeout_pulses)
 
-        pio_read = pio_read_function(
-            state_machine=state_machine, timeout_us=timeout_us, timeout_pulses=timeout_pulses
-        )
-
-        if pio_read is None:
-            return None
-
-        c_cs, d_cs, duty_cycle_override = pio_read
-
-        if duty_cycle_override is not None:
-            return PulseProperties(
-                period_us=None,
-                width_us=None,
-                duty_cycle=duty_cycle_override,
-                c_cs=c_cs,
-                d_cs=d_cs,
-            )
-
-        period_cs = timeout_pulses - d_cs
-        width_cs = c_cs - d_cs
-
-        try:
-            duty_cycle = width_cs / period_cs
-        except ZeroDivisionError:
-            duty_cycle = None
-
-        return PulseProperties(
-            period_us=cycles_to_periods_us(period_cs),
-            width_us=cycles_to_periods_us(width_cs),
-            duty_cycle=duty_cycle,
-            c_cs=c_cs,
-            d_cs=d_cs,
+        return pio_read_function(
+            state_machine=state_machine,
+            timeout_us=timeout_us,
+            timeout_pulses=timeout_pulses,
+            clock_period_microseconds=clock_period_microseconds,
         )
 
     return measure

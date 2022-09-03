@@ -55,3 +55,79 @@ OutputPIO = namedtuple(
         "duty_cycle_override",
     ],
 )
+PulseProperties = namedtuple(
+    "PulseProperties",
+    [
+        # The pulse's period (time from rising edge to rising edge) in microseconds as a float.
+        "period_us",
+        # The duration of the high side of the pulse in microseconds as a float.
+        "width_us",
+        # Pulse's width / pulse's period. If the period is 0, or any other divide by zero situation
+        # occurs, this value will be None, otherwise it will be a float.
+        "duty_cycle",
+        # C-Point Clock Cycles, consumed by debugging and will be removed.
+        "c_cs",
+        # D-Point Clock Cycles, consumed by debugging and will be removed.
+        "d_cs",
+    ],
+)
+
+
+def cycles_to_periods_us(
+    cycles: float, clock_period_microseconds: int, cycles_per_read: int
+) -> float:
+    """
+    Converts the number of clock cycles as returned by the PIO to the period elapsed in
+    microseconds. We multiply the output by 2 because it takes two clock cycles to decrement
+    the counter, and then `jmp` based on the pin's value.
+    :param cycles: Number of cycles.
+    :return: Period in microseconds.
+    """
+
+    return cycles * clock_period_microseconds * cycles_per_read
+
+
+def convert_pio_output(
+    pio_read: OutputPIO, timeout_pulses: int, clock_period_microseconds: int, cycles_per_read: int
+) -> PulseProperties:
+    """
+
+    :param pio_read:
+    :param timeout_pulses:
+    :param clock_period_microseconds:
+    :param cycles_per_read:
+    :return:
+    """
+
+    if pio_read.duty_cycle_override is not None:
+        return PulseProperties(
+            period_us=None,
+            width_us=None,
+            duty_cycle=pio_read.duty_cycle_override,
+            c_cs=pio_read.c_clock_cycles,
+            d_cs=pio_read.d_clock_cycles,
+        )
+
+    period_cs = timeout_pulses - pio_read.d_clock_cycles
+    width_cs = pio_read.c_clock_cycles - pio_read.d_clock_cycles
+
+    try:
+        duty_cycle = width_cs / period_cs
+    except ZeroDivisionError:
+        duty_cycle = None
+
+    return PulseProperties(
+        period_us=cycles_to_periods_us(
+            cycles=period_cs,
+            clock_period_microseconds=clock_period_microseconds,
+            cycles_per_read=cycles_per_read,
+        ),
+        width_us=cycles_to_periods_us(
+            cycles=width_cs,
+            clock_period_microseconds=clock_period_microseconds,
+            cycles_per_read=cycles_per_read,
+        ),
+        duty_cycle=duty_cycle,
+        c_cs=pio_read.c_clock_cycles,
+        d_cs=pio_read.d_clock_cycles,
+    )

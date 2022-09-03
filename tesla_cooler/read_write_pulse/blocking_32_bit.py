@@ -9,7 +9,8 @@ from rp2 import asm_pio
 from tesla_cooler.read_write_pulse.pulse_common import (
     MAX_32_BIT_VALUE,
     OutputPIO,
-    fifo_count_timeout,
+    PulseProperties,
+    fifo_count_timeout, convert_pio_output, cycles_to_periods_us
 )
 
 try:
@@ -38,15 +39,11 @@ def pulse_properties_pio_blocking_32bit() -> None:
     pull(block)  # type: ignore
     mov(x, osr)  # type: ignore
 
-    # Set the value in y (so the value from the OSR) as the initial value for x.
-    # This is to be able to time out, not to actually count the values.
-    mov(y, x)  # type: ignore
-
     # Pin's value is currently unknown.
     # We wait for the pin's value to be high.
 
     wait(1, pin, 0).side(0b00)  # pin 0 goes high when the input signal goes high for the first time
-    wait(0, pin, 0).side(0b01)  # pin 0 goes low
+    wait(0, pin, 0).side(0b01)
 
     # Falling edge has occurred. Start the countdown timer.
     # From here on we will actually be measuring the waveform.
@@ -55,134 +52,29 @@ def pulse_properties_pio_blocking_32bit() -> None:
     # Wait around until pin goes high again, decrementing `x` for each count it isn't high.
     label("pin_still_low")  # type: ignore
     jmp(pin, "pin_high_again")  # type: ignore
-    jmp(y_dec, "pin_still_low")  # type: ignore
+    jmp(x_dec, "pin_still_low")  # type: ignore
     label("pin_high_again")  # type: ignore
 
     # Point C
-    in_(y, 32).side(0b10)  # type: ignore
+    in_(x, 32).side(0b11)  # type: ignore
     push(noblock)  # type: ignore
 
     # Wait for another falling edge, pin is currently high
-    label("post_decrement")  # type: ignore
-    jmp(pin, "pin_high_decrement")  # type: ignore
-    jmp("pin_low_fall_through")  # type: ignore
-
-    label("pin_high_decrement")  # type: ignore
-    jmp(y_dec, "post_decrement")  # type: ignore
-    label("pin_low_fall_through")  # type: ignore
+    label("dec")
+    jmp(x_dec, "check_pin_high")
+    label("check_pin_high")
+    jmp(pin, "dec")
 
     # Point D
-    in_(y, 32).side(0b00)  # type: ignore
-
-    label("write_output")  # type: ignore
-    push(noblock)  # type: ignore
-
-    wrap()  # type: ignore
-
-
-@asm_pio(sideset_init=(rp2.PIO.OUT_LOW,))
-def pulse_properties_pio_blocking_32bit_old() -> None:
-    """
-    PIO program to measure pulse width and period.
-    Width and period are truncated to 16 bits, packed into RX FIFO, and shifted out in a single
-    operation.
-    :return: None
-    """
-    # pylint: disable=undefined-variable
-
-    # Set the pin as an input
-    set(pindirs, 0)  # type: ignore
-
-    wrap_target()  # type: ignore
-
-    # Block forever until the CPU sets the timeout count
-    pull(block)  # type: ignore
-    mov(x, osr)  # type: ignore
-
-    # Set the value in y (so the value from the OSR) as the initial value for x.
-    # This is to be able to time out, not to actually count the values.
-    mov(y, x)  # type: ignore
-
-    # Pin's value is currently unknown.
-    # We wait for the pin's value to be high.
-
-    label("init_pin_low")  # type: ignore
-    jmp(pin, "init_pin_high")  # type: ignore
-    jmp(y_dec, "init_pin_low")  # type: ignore
-    # If this is reached, it means we've timed out waiting for it to go high.
-    # Write the 0xFFFFFFFF value to the ISR
-    in_(y, 32)  # type: ignore
-    jmp("write_output")  # type: ignore
-    label("init_pin_high")  # type: ignore
-
-    # The pin has become high, or it started out as high.
-
-    # Reset the timeout counter to the value given by user, which is stored in `y`.
-    mov(y, x)  # type: ignore
-
-    # Wait for a falling edge.
-
-    # Wait for another falling edge, pin is currently high
-    label("x_decremented")  # type: ignore
-    jmp(pin, "wait_for_low")  # type: ignore
-    jmp("falling_edge")  # type: ignore
-
-    label("wait_for_low")  # type: ignore
-    jmp(y_dec, "x_decremented")  # type: ignore
-    # If this is reached, it means we've timed out waiting for it to go low again.
-    # Write the input timeout count to the ISR
-    in_(x, 32)  # type: ignore
-    jmp("write_output")  # type: ignore
-    label("falling_edge")  # type: ignore
-
-    # Falling edge has occurred. Start the countdown timer.
-    # From here on we will actually be measuring the waveform.
-
-    # Reset the timeout counter to the value given by user, which is stored in `y`.
-    # Point B
-    mov(y, x)  # type: ignore
-
-    # Wait for a rising edge.
-
-    # Wait around until pin goes high again, decrementing `x` for each count it isn't high.
-    label("pin_still_low")  # type: ignore
-    jmp(pin, "pin_high_again")  # type: ignore
-    jmp(y_dec, "pin_still_low")  # type: ignore
-    # If this is reached, it means we've timed out waiting for it to go high.
-    # Write the 0xFFFFFFFF value to the ISR
-    in_(y, 32)  # type: ignore
-    jmp("write_output")  # type: ignore
-    label("pin_high_again")  # type: ignore
-
-    # Point C
-    in_(y, 32)  # type: ignore
-    push(noblock)  # type: ignore
-
-    # Wait for another falling edge, pin is currently high
-    label("x_decremented_2")  # type: ignore
-    jmp(pin, "wait_for_low_2")  # type: ignore
-    jmp("falling_edge_2")  # type: ignore
-
-    label("wait_for_low_2")  # type: ignore
-    jmp(y_dec, "x_decremented_2")  # type: ignore
-    # If this is reached, it means we've timed out waiting for it to go low again.
-    # Write the input timeout count to the ISR
-    in_(x, 32)  # type: ignore
-    jmp("write_output")  # type: ignore
-    label("falling_edge_2")  # type: ignore
-
-    # Point D
-    in_(y, 32)  # type: ignore
-
-    label("write_output")  # type: ignore
+    in_(x, 32).side(0b00)  # type: ignore
     push(noblock)  # type: ignore
 
     wrap()  # type: ignore
 
 
 def read_pio_blocking_32bit(
-    state_machine: rp2.StateMachine, timeout_us: int, timeout_pulses: int
-) -> "t.Optional[OutputPIO]":
+    state_machine: rp2.StateMachine, timeout_us: int, timeout_pulses: int, clock_period_microseconds: int,
+) -> "t.Optional[PulseProperties]":
     """
     Read the rx_fifo of a given state machine, convert the resulting values to c/d clock cycle
     values to eventually be converted to period/duty cycle.
@@ -198,17 +90,61 @@ def read_pio_blocking_32bit(
     if not words_in_fifo:
         return None
 
-    output: "t.List[t.Optional[int]]" = []
+    def read_pio() -> OutputPIO:
+        """
 
-    for _ in range(2):
+        :return:
+        """
 
-        value = state_machine.get()
+        output: "t.List[t.Optional[int]]" = []
 
-        if value == MAX_32_BIT_VALUE:
-            return OutputPIO(None, None, 0)
-        elif value == timeout_pulses:
-            return OutputPIO(None, None, 1)
+        for _ in range(2):
 
-        output.append(value)
+            value = state_machine.get()
 
-    return OutputPIO(*list(output + [None]))
+            if value == MAX_32_BIT_VALUE:
+                return OutputPIO(None, None, 0)
+            elif value == timeout_pulses:
+                return OutputPIO(None, None, 1)
+
+            output.append(value)
+
+        return OutputPIO(*list(output + [None]))
+
+    pio_read = read_pio()
+
+    if pio_read.duty_cycle_override is not None:
+        return PulseProperties(
+            period_us=None,
+            width_us=None,
+            duty_cycle=pio_read.duty_cycle_override,
+            c_cs=pio_read.c_clock_cycles,
+            d_cs=pio_read.d_clock_cycles,
+        )
+
+    c_cs = pio_read.c_clock_cycles
+    d_cs = pio_read.d_clock_cycles
+
+    period_cs = timeout_pulses - d_cs
+    width_cs = c_cs - d_cs
+
+    try:
+        duty_cycle = width_cs / period_cs
+    except ZeroDivisionError:
+        duty_cycle = None
+
+    return PulseProperties(
+        period_us=cycles_to_periods_us(
+            cycles=period_cs,
+            clock_period_microseconds=clock_period_microseconds,
+            cycles_per_read=2,
+        ),
+        width_us=cycles_to_periods_us(
+            cycles=width_cs,
+            clock_period_microseconds=clock_period_microseconds,
+            cycles_per_read=2,
+        ),
+        duty_cycle=duty_cycle,
+        c_cs=c_cs,
+        d_cs=d_cs,
+    )

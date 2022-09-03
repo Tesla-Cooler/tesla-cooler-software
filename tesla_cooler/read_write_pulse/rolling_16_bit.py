@@ -14,7 +14,8 @@ except ImportError:
 from tesla_cooler.read_write_pulse.pulse_common import (
     MAX_32_BIT_VALUE,
     OutputPIO,
-    fifo_count_timeout,
+    PulseProperties,
+    fifo_count_timeout, convert_pio_output,
 )
 
 
@@ -119,9 +120,21 @@ def pulse_properties_pio_rolling_16bit() -> None:
     wrap()  # type: ignore
 
 
+def list_mean(values: "t.List[int]") -> float:
+    """
+    Get the mean of a list of numbers.
+    :param values: Either ints or floats.
+    :return: The mean of the input list.
+    """
+    return float(sum(values) / len(values))
+
+
 def read_pio_rolling_16bit(
-    state_machine: rp2.StateMachine, timeout_us: int, timeout_pulses: int
-) -> t.Optional[OutputPIO]:
+    state_machine: rp2.StateMachine,
+    timeout_us: int,
+    timeout_pulses: int,
+    clock_period_microseconds: int,
+) -> t.Optional[PulseProperties]:
     """
     Read the rx_fifo of a given state machine, convert the resulting values to c/d clock cycle
     values to eventually be converted to period/duty cycle.
@@ -141,24 +154,18 @@ def read_pio_rolling_16bit(
     packed_value = state_machine.get()
 
     if packed_value == MAX_32_BIT_VALUE:
-        output = None, None, 0
+        pio_read = OutputPIO(None, None, 0)
     elif packed_value == timeout_pulses:
-        output = None, None, 1
+        pio_read = OutputPIO(None, None, 1)
     else:
-
         # TODO: why do I have to do this mask?
         c_point_clock_cycles = ((packed_value >> 16) & 0xFFFF) | (timeout_pulses & 0xFF0000)
         d_point_clock_cycles = (packed_value & 0xFFFF) | (timeout_pulses & 0xFF0000)
+        pio_read = OutputPIO(c_point_clock_cycles, d_point_clock_cycles, None)
 
-        output = c_point_clock_cycles, d_point_clock_cycles, None
-
-    return OutputPIO(*output)
-
-
-def list_mean(values: "t.List[int]") -> float:
-    """
-    Get the mean of a list of numbers.
-    :param values: Either ints or floats.
-    :return: The mean of the input list.
-    """
-    return float(sum(values) / len(values))
+    return convert_pio_output(
+        pio_read=pio_read,
+        timeout_pulses=timeout_pulses,
+        clock_period_microseconds=clock_period_microseconds,
+        cycles_per_read=2,
+    )
