@@ -4,12 +4,14 @@ pulse width and duty cycle.
 
 This approach is synchronous meaning the pulses are only measured on-demand, and the caller must
 block while the waveform is measured.
+
+TODO: Needs timeouts w/ duty cycle override
 """
 
 import rp2
 from rp2 import asm_pio
 
-from tesla_cooler.read_write_pulse.read_write_pulse_common import PulseProperties
+from tesla_cooler.read_write_pulse.read_write_pulse_common import MAX_32_BIT_VALUE, PulseProperties
 
 try:
     import typing as t  # pylint: disable=unused-import
@@ -38,18 +40,40 @@ def synchronous_measure_pulse_pio() -> None:
     mov(x, osr)  # type: ignore
     mov(y, x)  # type: ignore
 
-    wait(0, pin, 0)  # type: ignore
-    wait(1, pin, 0)  # type: ignore
+    # `pin` state currently unknown
+
+    # Wait for a falling edge, or discover pin is already low.
+    label("init pin check")  # type: ignore
+    jmp(pin, "init decrement")  # type: ignore
+    jmp("init low found")  # type: ignore
+    label("init decrement")  # type: ignore
+    jmp(x_dec, "init pin check")  # type: ignore
+    # TODO: timeout handle
+    label("init low found")  # type: ignore
+
+    mov(x, y)  # type: ignore
+
+    # Wait for a rising edge.
+    label("init high check")  # type: ignore
+    jmp(pin, "init high found")  # type: ignore
+    jmp(x_dec, "init high check")  # type: ignore
+    # TODO: timeout handle
+    label("init high found")  # type: ignore
+
+    mov(x, y)  # type: ignore
 
     # Wait for a falling edge.
     label("decrement")  # type: ignore
     jmp(x_dec, "decremented")  # type: ignore
+    jmp("never low")  # type: ignore
     label("decremented")  # type: ignore
     jmp(pin, "decrement")  # type: ignore
+    label("never low")  # type: ignore
 
     # Wait for another rising edge.
     label("still low")  # type: ignore
     jmp(y_dec, "pin check")  # type: ignore
+    jmp("high found")  # type: ignore
     label("pin check")  # type: ignore
     jmp(pin, "high found")  # type: ignore
     jmp("still low")  # type: ignore
@@ -90,8 +114,15 @@ def read_synchronous_measure_pulse_pio(
 
     for _ in range(10):
         state_machine.put(timeout_pulses)
-        a_readings.append((timeout_pulses - state_machine.get()) * 2)
-        b_readings.append((timeout_pulses - state_machine.get()) * 3)
+
+        a_raw = state_machine.get()
+        b_raw = state_machine.get()
+
+        if (a_raw == MAX_32_BIT_VALUE) and (b_raw == timeout_pulses - 1):
+            return PulseProperties(frequency=None, pulse_width=None, duty_cycle=1)
+
+        a_readings.append((timeout_pulses - a_raw + 1) * 2)
+        b_readings.append((timeout_pulses - b_raw) * 3)
 
     a_average = list_mean(a_readings)
     b_average = list_mean(b_readings)
