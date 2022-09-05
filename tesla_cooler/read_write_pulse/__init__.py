@@ -1,27 +1,9 @@
 """
-Use PIO to measure properties of square waves.
+Use a PIO state machine to accurately measure the frequency, pulse width, and duty cycle of a
+square wave.
 
 Adapted from a post by `danjperrorn` on the micropython forum:
-    https://forum.micropython.org/viewtopic.php?f=21&t=9895#p55342
-
-The following represents the different parts of a square waveform that are measured with this
-program. Note that the 'timer' always starts at point 'b', because we only measure one pulse at a
-time.
-
-            ----- Timer starts here.
-           |
-           |
-    a      b      c     d
-     ******       ******
-     ^    *       ^    *
-******    *********    ******
-
-
-    a      b      c     d
-***********       ******
-          *       ^    *
-          *********    ******
-
+    * https://forum.micropython.org/viewtopic.php?f=21&t=9895#p55342
 """
 
 import rp2
@@ -75,21 +57,19 @@ def measure_pulse_properties(
     Creates a callable to measure the length of a square-wave pulse on a GPIO pin.
     Calling the returned callable will measure the most recent pulse period/width in microseconds.
 
-    :param data_pin: `Pin` object, represents which physical pin to read pulses from.
+    :param data_pin: `machine.Pin` object, represents which physical pin to read pulses from.
     :param state_machine_index: The PIO state machine index to be used to make the measurements.
     :param clock_freq_hz: The frequency to drive the state machine at. Note that this will effect
     the range of measurable frequencies. Both Period and Pulse width are sent back to the CPU from
-    the state machine as 16 bit numbers, and therefore have a maximum value of 65535. If the
-    pulse lasts longer than can be encoded into this 16 bit value, the result will not make any
+    the state machine as 32 bit numbers, and therefore have a maximum value of 4,294,967,295. If the
+    pulse lasts longer than can be encoded into this 32 bit value, the result will not make any
     sense. The formula for the min/max frequency given the clock frequency is as follows:
 
-    min_freq_hz = 1/(1/(c*2) * 65535)
+    min_freq_hz = 1/(1/(c*2) * 4,294,967,295)
     max_freq_hz = 1/(1/(c*2) * 1)
 
     Given c = input clock frequency in hz. By default, the fastest possible clock frequency on the
-    pico is used, so this range is between ~3815 Hz - ~250 MHz. If you wanted to measure waveforms
-    in the 100-500 Hz range, you could set `clock_freq_hz` to 2949075, resulting in a measurable
-    range from ~90 Hz - ~5.898 MHz.
+    pico is used.
 
     :return: Callable that takes a single argument, the read timeout in seconds. Internally, the
     PIO reads the waveform ~2 times, so the timeout must be long enough to cover this whole
@@ -116,7 +96,7 @@ def measure_pulse_properties(
 
 def main() -> None:
     """
-    Entrypoint. Prints pulse duration periodically.
+    Sample entrypoint. Prints pulse duration periodically.
     :return: None
     """
 
