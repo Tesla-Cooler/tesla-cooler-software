@@ -1,5 +1,12 @@
 # Changelog
 
+0.3.0 - (2022-09-05)
+------------------
+
+* Starting work on a new version of the cooler. Goal is to be much quieter and more responsive.
+* Can accurately measure square waves (frequency/duty cycle) using PIO.
+
+
 0.2.2 - (2022-07-18)
 ------------------
 
