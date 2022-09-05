@@ -132,7 +132,9 @@ disable=invalid-name,
         bad-continuation, # ignore multiline def reflow
         ungrouped-imports, # handled by isort
         logging-fstring-interpolation,
-        no-else-return
+        no-else-return,
+        duplicate-code, # hard to deal with common micropython/python idioms
+        assignment-from-no-return # same as above
 
 
 # Enable the message, report, category or checker with the given id(s). You can

@@ -10,11 +10,17 @@ See: [esologic.com/tesla-cooler](https://www.esologic.com/tesla-cooler)
 
 With the virtual env activated, and your Pico at port `/dev/ttyACM0` run: 
 
-```
-rshell -p /dev/ttyACM0 --buffer-size 512 -f upload.txt
+```bash
+rshell -p /dev/ttyACM0 --buffer-size 32 -f deploy_prod.txt
 ```
 
-This will upload the library files only to the pico.
+This will upload the library files only to the pico, and run the main production firmware.
+
+For development, upload and run test firmware with:
+
+```bash
+rshell -p /dev/ttyACM0 --buffer-size 32 -f deploy_test.txt
+```
 
 ## Getting Started
 
@@ -24,7 +30,7 @@ See the `requirements` directory for required Python modules for building, testi
 They can all be installed in a [virtual environment](https://docs.python.org/3/library/venv.html) 
 using the follow commands:
 
-```
+```bash
 python3 -m venv venv
 source venv/bin/activate
 pip install -r ./requirements/dev.txt -r ./requirements/prod.txt -r ./requirements/test.txt
@@ -41,7 +47,7 @@ There's also a bin script to do this:
 The `micropy.json` file describes the MicroPython version that this firmware is designed to run on.
 with the virtual environment activated, run:
 
-```
+```bash
 micropy
 ```
 
@@ -63,7 +69,7 @@ Make sure you mark `tesla_cooler` and `./test` as source roots!
 This project uses pytest to manage and run unit tests. Unit tests located in the `test` directory 
 are automatically run during the CI build. You can run them manually with:
 
-```
+```bash
 ./tools/run_tests.sh
 ```
 
@@ -79,13 +85,13 @@ There are a few linters/code checks included with this project to speed up the d
 You can run these tools automatically in check mode, meaning you will get an error if any of them
 would not pass with:
 
-```
+```bash
 ./tools/run_checks.sh
 ```
 
 Or actually automatically apply the fixes with:
 
-```
+```bash
 ./tools/apply_linters.sh
 ```
 
@@ -96,13 +102,13 @@ There are also scripts in `./tools/` that include run/check for each individual 
 
 First you need to init the repo as a git repo with:
 
-```
+```bash
 git init
 ```
 
 Then you can set up the git hook scripts with:
 
-```
+```bash
 pre-commit install
 ```
 
@@ -119,13 +125,13 @@ Also by default, pytest needs to pass before you can push.
 
 If you'd like skip these checks you can commit with:
 
-```
+```bash
 git commit --no-verify
 ```
 
 If you'd like to quickly run these pre-commit checks on all files (not just the staged ones) you
 can run:
 
-```
+```bash
 pre-commit run --all-files
 ```

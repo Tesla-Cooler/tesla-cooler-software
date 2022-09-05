@@ -10,6 +10,6 @@ source ./venv/bin/activate
 
 export PYTHONPATH="./tesla_cooler:./test${PYTHONPATH+:}${PYTHONPATH:-}"
 
-mypy --show-error-codes main.py  # Run on loose files within this project
+mypy --show-error-codes *.py  # Run on loose files within this project
 mypy --show-error-codes -p tesla_cooler -p test  # Run on sub-packages within this project
 

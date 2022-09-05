@@ -3,4 +3,6 @@
 # rshell -p /dev/ttyACM0 --buffer-size 512 -f upload.txt
 
 cp ./tesla_cooler/* /pyboard/tesla_cooler
-cp ./main.py /pyboard/main.py
+cp ./*.py /pyboard/
+
+repl ~ from main_prod import main ~ main()
