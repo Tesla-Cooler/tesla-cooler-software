@@ -11,10 +11,6 @@ import utime
 from machine import Pin
 
 from tesla_cooler.read_write_pulse.read_write_pulse_common import MAX_32_BIT_VALUE, PulseProperties
-from tesla_cooler.read_write_pulse.rolling_16_bit import (
-    pulse_properties_pio_rolling_16bit,
-    read_pio_rolling_16bit,
-)
 from tesla_cooler.read_write_pulse.synchronous_measure_pulse import (
     read_synchronous_measure_pulse_pio,
     synchronous_measure_pulse_pio,
@@ -36,9 +32,9 @@ INPUT_SYNC_ENABLE_ADDRESS = _PIO0_BASE | _INPUT_SYNC_BYPASS_OFFSET
 
 def pretty_print_pulse_properties(pulse_properties: PulseProperties) -> str:
     """
-
-    :param pulse_properties:
-    :return:
+    Converts a `PulseProperty` namedtuple to a string for printing.
+    :param pulse_properties: To convert.
+    :return: To read.
     """
 
     output = f"Frequency (hz): {pulse_properties.frequency} "

@@ -147,3 +147,7 @@ def main() -> None:
     )
 
     print("Timers configured!")
+
+
+if __name__ == "__main__":
+    main()

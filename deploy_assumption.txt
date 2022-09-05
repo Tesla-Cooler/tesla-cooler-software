@@ -1,6 +1,0 @@
-# Meant to be used as the `-f` arg of an `rshell` command.
-# To upload files onto a pico on port `/dev/ttyACM0` run:
-# rshell -p /dev/ttyACM0 --buffer-size 512 -f upload.txt
-
-cp ./assumptions_check.py /pyboard/assumptions_check.py
-repl ~ from assumptions_check import main ~ main()
