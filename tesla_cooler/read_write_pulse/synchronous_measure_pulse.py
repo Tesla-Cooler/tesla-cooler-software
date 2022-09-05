@@ -16,8 +16,7 @@ from tesla_cooler.read_write_pulse.read_write_pulse_common import MAX_32_BIT_VAL
 try:
     import typing as t  # pylint: disable=unused-import
 except ImportError:
-    # we're probably on the pico if this occurs.
-    pass
+    pass  # we're probably on the pico if this occurs.
 
 
 @asm_pio()
@@ -42,27 +41,23 @@ def synchronous_measure_pulse_pio() -> None:
 
     # `pin` state currently unknown
 
-    # Wait for a falling edge, or discover pin is already low.
+    # Wait for a falling edge, or discover pin is already low. ~3 cycles per loop.
     label("init pin check")  # type: ignore
     jmp(pin, "init decrement")  # type: ignore
     jmp("init low found")  # type: ignore
     label("init decrement")  # type: ignore
     jmp(x_dec, "init pin check")  # type: ignore
-    # TODO: timeout handle
     label("init low found")  # type: ignore
-
     mov(x, y)  # type: ignore
 
-    # Wait for a rising edge.
+    # Wait for a rising edge. ~2 cycles per loop.
     label("init high check")  # type: ignore
     jmp(pin, "init high found")  # type: ignore
     jmp(x_dec, "init high check")  # type: ignore
-    # TODO: timeout handle
     label("init high found")  # type: ignore
-
     mov(x, y)  # type: ignore
 
-    # Wait for a falling edge.
+    # Wait for a falling edge. ~2 cycles per loop.
     label("decrement")  # type: ignore
     jmp(x_dec, "decremented")  # type: ignore
     jmp("never low")  # type: ignore
@@ -70,7 +65,7 @@ def synchronous_measure_pulse_pio() -> None:
     jmp(pin, "decrement")  # type: ignore
     label("never low")  # type: ignore
 
-    # Wait for another rising edge.
+    # Wait for another rising edge. ~3 cycles per loop.
     label("still low")  # type: ignore
     jmp(y_dec, "pin check")  # type: ignore
     jmp("high found")  # type: ignore
@@ -88,50 +83,41 @@ def synchronous_measure_pulse_pio() -> None:
     wrap()  # type: ignore
 
 
-def list_mean(values: "t.List[int]") -> float:
-    """
-    Get the mean of a list of numbers.
-    :param values: Either ints or floats.
-    :return: The mean of the input list.
-    """
-    return float(sum(values) / len(values))
-
-
 def read_synchronous_measure_pulse_pio(
-    state_machine: rp2.StateMachine, timeout_pulses: int, clock_period: float
+    state_machine: rp2.StateMachine,
+    timeout_seconds: "t.Union[int, float]",
+    clock_period: "t.Union[int, float]",
 ) -> PulseProperties:
     """
 
     TODO: need to get cute there with comprehensions.
     :param state_machine:
-    :param timeout_pulses:
+    :param timeout_seconds:
     :param clock_period:
     :return:
     """
 
-    a_readings = []
-    b_readings = []
+    # The `5` here comes from the max amount of loops it could take to get through the PIO
+    # in the 100%/0% duty cycle cases. In both cases, blocking completely on side of the
+    # measurement always sums to 5 cycles per loop.
+    timeout_pulses = int((timeout_seconds // clock_period) // 5)
 
-    for _ in range(10):
-        state_machine.put(timeout_pulses)
+    state_machine.put(timeout_pulses)
 
-        a_raw = state_machine.get()
-        b_raw = state_machine.get()
+    a_raw = state_machine.get()
+    b_raw = state_machine.get()
 
-        if (a_raw == MAX_32_BIT_VALUE) and (b_raw == timeout_pulses - 1):
-            return PulseProperties(frequency=None, pulse_width=None, duty_cycle=1)
-
-        a_readings.append((timeout_pulses - a_raw + 1) * 2)
-        b_readings.append((timeout_pulses - b_raw) * 3)
-
-    a_average = list_mean(a_readings)
-    b_average = list_mean(b_readings)
-
-    total_clock_cycles = a_average + b_average
-    total_period = total_clock_cycles * clock_period
-
-    return PulseProperties(
-        frequency=(1 / total_period),
-        pulse_width=a_average * clock_period,
-        duty_cycle=a_average / total_clock_cycles,
-    )
+    if (a_raw == MAX_32_BIT_VALUE) and (b_raw == timeout_pulses - 1):
+        return PulseProperties(frequency=None, pulse_width=None, duty_cycle=1)
+    elif (b_raw == MAX_32_BIT_VALUE) and (a_raw == timeout_pulses - 1):
+        return PulseProperties(frequency=None, pulse_width=None, duty_cycle=0)
+    else:
+        a_unpacked = (timeout_pulses - a_raw) * 2
+        b_unpacked = (timeout_pulses - b_raw) * 3
+        total_clock_cycles = a_unpacked + b_unpacked
+        total_period = total_clock_cycles * clock_period
+        return PulseProperties(
+            frequency=(1 / total_period),
+            pulse_width=a_unpacked * clock_period,
+            duty_cycle=a_unpacked / total_clock_cycles,
+        )

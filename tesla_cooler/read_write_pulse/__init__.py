@@ -41,10 +41,8 @@ from tesla_cooler.read_write_pulse.write_square_wave import slow_square_pio, squ
 
 try:
     import typing as t
-    from collections import namedtuple
 except ImportError:
-    # we're probably on the pico if this occurs.
-    from ucollections import namedtuple  # type: ignore
+    pass  # we're probably on the pico if this occurs.
 
 
 PICO_CLOCK_FREQUENCY_HZ = int(1.25e8)
@@ -54,16 +52,16 @@ _INPUT_SYNC_BYPASS_OFFSET = 0x038
 INPUT_SYNC_ENABLE_ADDRESS = _PIO0_BASE | _INPUT_SYNC_BYPASS_OFFSET
 
 
-def pprint_pulse_properties(pulse_properties: PulseProperties) -> str:
+def pretty_print_pulse_properties(pulse_properties: PulseProperties) -> str:
     """
 
     :param pulse_properties:
     :return:
     """
 
-    output = f"Frequency (KHz): {round(pulse_properties.frequency / 1e3, 3)} "
-    output += f"Pulse Width (us): {round(pulse_properties.pulse_width * 1e6, 3)} "
-    output += f"Duty Cycle: {round(pulse_properties.duty_cycle * 100, 1)}%"
+    output = f"Frequency (hz): {pulse_properties.frequency} "
+    output += f"Pulse Width (s): {pulse_properties.pulse_width} "
+    output += f"Duty Cycle: {pulse_properties.duty_cycle}"
 
     return output
 
@@ -72,7 +70,7 @@ def measure_pulse_properties(
     data_pin: Pin,
     state_machine_index: int,
     clock_freq_hz: int = PICO_CLOCK_FREQUENCY_HZ,
-) -> "t.Callable[[int], t.Optional[PulseProperties]]":
+) -> "t.Callable[[int | float], t.Optional[PulseProperties]]":
     """
     Creates a callable to measure the length of a square-wave pulse on a GPIO pin.
     Calling the returned callable will measure the most recent pulse period/width in microseconds.
@@ -93,8 +91,14 @@ def measure_pulse_properties(
     in the 100-500 Hz range, you could set `clock_freq_hz` to 2949075, resulting in a measurable
     range from ~90 Hz - ~5.898 MHz.
 
-    :return: Callable that returns the pulse duration in microseconds.
+    :return: Callable that takes a single argument, the read timeout in seconds. Internally, the
+    PIO reads the waveform ~2 times, so the timeout must be long enough to cover this whole
+    operation. For example, you're reading waveforms at 1 Hz, you'll want to set the timeout
+    to >2s. Experimentally, doubling the expected period is a safe bet, so for reading a 1 Hz
+    square wave, a safe timeout would be three seconds.
     """
+
+    clock_period = 1 / clock_freq_hz
 
     state_machine = rp2.StateMachine(
         state_machine_index,
@@ -105,8 +109,8 @@ def measure_pulse_properties(
 
     state_machine.active(1)
 
-    return lambda timeout_pulses: read_synchronous_measure_pulse_pio(
-        state_machine=state_machine, timeout_pulses=timeout_pulses, clock_period=1 / clock_freq_hz
+    return lambda timeout_seconds: read_synchronous_measure_pulse_pio(
+        state_machine=state_machine, timeout_seconds=timeout_seconds, clock_period=clock_period
     )
 
 
@@ -122,11 +126,9 @@ def main() -> None:
     )
 
     while True:
-
-        properties = latest_properties(MAX_32_BIT_VALUE)
-
+        properties = latest_properties(0.1)
         if properties is not None:
-            print(pprint_pulse_properties(properties))
+            print(pretty_print_pulse_properties(properties))
             utime.sleep(0.025)
 
 
