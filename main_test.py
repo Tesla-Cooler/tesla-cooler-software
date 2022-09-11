@@ -2,7 +2,7 @@
 Entry point for development.
 """
 
-from tesla_cooler import read_write_pulse
+from tesla_cooler import four_wire_fan
 
 
 def main() -> None:
@@ -10,4 +10,4 @@ def main() -> None:
     Run what we're testing.
     :return: None
     """
-    read_write_pulse.main()
+    four_wire_fan.main()

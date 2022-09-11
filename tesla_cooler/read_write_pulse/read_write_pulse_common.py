@@ -21,15 +21,3 @@ PulseProperties = namedtuple(
         "duty_cycle",
     ],
 )
-
-SquareWaveController = namedtuple(
-    "SquareWaveController",
-    [
-        # Function that takes the frequency in HZ to drive the output square wave at.
-        "set_frequency_hz",
-        # Callable, starts creating waves if they're not being created already.
-        "enable",
-        # Callable, stops creating waves. Pin will be set high once disabled.
-        "disable",
-    ],
-)
