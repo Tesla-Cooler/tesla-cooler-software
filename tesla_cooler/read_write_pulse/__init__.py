@@ -7,15 +7,21 @@ Adapted from a post by `danjperrorn` on the micropython forum:
 """
 
 import rp2
-import utime
 from machine import Pin
 
-from tesla_cooler.read_write_pulse.read_write_pulse_common import MAX_32_BIT_VALUE, PulseProperties
+from tesla_cooler.read_write_pulse.read_write_pulse_common import (
+    MAX_32_BIT_VALUE,
+    PulseProperties,
+    SquareWaveController,
+)
 from tesla_cooler.read_write_pulse.synchronous_measure_pulse import (
     read_synchronous_measure_pulse_pio,
     synchronous_measure_pulse_pio,
 )
-from tesla_cooler.read_write_pulse.write_square_wave import slow_square_pio, square_waver
+from tesla_cooler.read_write_pulse.write_square_wave import (
+    square_waver_pio,
+    square_waver_pio_frequency_to_counts,
+)
 
 try:
     import typing as t
@@ -83,10 +89,57 @@ def measure_pulse_properties(
         freq=clock_freq_hz,
     )
 
-    state_machine.active(1)
+    state_machine.active(True)
 
     return lambda timeout_seconds: read_synchronous_measure_pulse_pio(
         state_machine=state_machine, timeout_seconds=timeout_seconds, clock_period=clock_period
+    )
+
+
+def write_square_wave(
+    output_pin: Pin,
+    state_machine_index: int,
+    init_enabled: bool = True,
+    init_frequency_hz: int = 1_000,
+    clock_freq_hz: int = PICO_CLOCK_FREQUENCY_HZ,
+) -> SquareWaveController:
+    """
+    Writes 50% duty cycle square waves at a given frequency to an output pin.
+    :param output_pin: Waves will be written to this Pin.
+    :param state_machine_index: State machine to use, make sure there's noone using this already.
+    :param init_enabled: If the output should be initially enabled or not.
+    :param init_frequency_hz: Initial frequency to drive the output at.
+    :param clock_freq_hz: Modify the frequency the statemachine runs at for more granular control
+    of output. By default runs as fast as possible.
+    :return: A NamedTuple with property callables to be able to change the frequency of the output
+    as well as enable/disable the output all together.
+    """
+
+    state_machine = rp2.StateMachine(
+        state_machine_index, prog=square_waver_pio, set_base=output_pin, freq=clock_freq_hz
+    )
+
+    def write_frequency_if_active(frequency_hz: int) -> None:
+        """
+        If the state machine is active, convert the input frequency to count and send it to the
+        SM via the RX fifo. If the state machine is not active, do nothing.
+        :param frequency_hz: Desired frequency in Hertz.
+        :return: None
+        """
+        if state_machine.active():  # pylint: disable=no-value-for-parameter
+            state_machine.put(
+                square_waver_pio_frequency_to_counts(
+                    state_machine_frequency_hz=clock_freq_hz, frequency_hz=frequency_hz
+                )
+            )
+
+    state_machine.active(init_enabled)
+    write_frequency_if_active(init_frequency_hz)
+
+    return SquareWaveController(
+        set_frequency_hz=write_frequency_if_active,
+        enable=lambda: state_machine.active(True),
+        disable=lambda: state_machine.active(False),
     )
 
 
@@ -96,16 +149,17 @@ def main() -> None:
     :return: None
     """
 
-    latest_properties = measure_pulse_properties(
-        data_pin=Pin(0, Pin.IN),
+    wave_controller = write_square_wave(
+        output_pin=Pin(0, Pin.OUT),
         state_machine_index=0,
+        init_enabled=False,
     )
 
+    wave_controller.enable()
+    wave_controller.set_frequency_hz(10_000.5)
+
     while True:
-        properties = latest_properties(0.1)
-        if properties is not None:
-            print(pretty_print_pulse_properties(properties))
-            utime.sleep(0.025)
+        pass
 
 
 if __name__ == "__main__":

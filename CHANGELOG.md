@@ -5,6 +5,7 @@
 
 * Starting work on a new version of the cooler. Goal is to be much quieter and more responsive.
 * Can accurately measure square waves (frequency/duty cycle) using PIO.
+* Can accurately generate slow square waves, in the 1 Hz -> 100 KHz range.
 
 
 0.2.2 - (2022-07-18)
