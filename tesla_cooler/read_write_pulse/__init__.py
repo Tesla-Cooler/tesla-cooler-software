@@ -1,19 +1,19 @@
 """
-Use a PIO state machine to accurately measure the frequency, pulse width, and duty cycle of a
-square wave.
+Uses PIO state machines to characterize and create square waves.
 
-Adapted from a post by `danjperrorn` on the micropython forum:
-    * https://forum.micropython.org/viewtopic.php?f=21&t=9895#p55342
+* `measure_pulse_properties` is able to surmise changing duty cycles from waveforms that are
+changing in frequency, something that the micropython library function `time_pulse_us` wasn't able
+to do accurately.
+
+* `write_square_wave` is able to create square waves as low as 1 Hz, which was not possible with the
+library function. It should also be possible to go slower with this approach but this has not been
+implemented yet.
 """
 
 import rp2
 from machine import Pin
 
-from tesla_cooler.read_write_pulse.read_write_pulse_common import (
-    MAX_32_BIT_VALUE,
-    PulseProperties,
-    SquareWaveController,
-)
+from tesla_cooler.read_write_pulse.read_write_pulse_common import MAX_32_BIT_VALUE, PulseProperties
 from tesla_cooler.read_write_pulse.synchronous_measure_pulse import (
     read_synchronous_measure_pulse_pio,
     synchronous_measure_pulse_pio,
@@ -27,7 +27,6 @@ try:
     import typing as t
 except ImportError:
     pass  # we're probably on the pico if this occurs.
-
 
 PICO_CLOCK_FREQUENCY_HZ = int(1.25e8)
 
@@ -99,68 +98,64 @@ def measure_pulse_properties(
 def write_square_wave(
     output_pin: Pin,
     state_machine_index: int,
-    init_enabled: bool = True,
-    init_frequency_hz: int = 1_000,
+    init_frequency_hz: int = 0,
     clock_freq_hz: int = PICO_CLOCK_FREQUENCY_HZ,
-) -> SquareWaveController:
+) -> "t.Callable[[int], bool]":
     """
     Writes 50% duty cycle square waves at a given frequency to an output pin.
     :param output_pin: Waves will be written to this Pin.
     :param state_machine_index: State machine to use, make sure there's noone using this already.
-    :param init_enabled: If the output should be initially enabled or not.
     :param init_frequency_hz: Initial frequency to drive the output at.
     :param clock_freq_hz: Modify the frequency the statemachine runs at for more granular control
     of output. By default runs as fast as possible.
-    :return: A NamedTuple with property callables to be able to change the frequency of the output
-    as well as enable/disable the output all together.
+    :return: A callable that accepts the target frequency in hz as an argument, and returns whether
+    or not the state machine was written to. If you send the same frequency twice in a row, the
+    state machine's state will be exactly the same and the write will be skipped. Float frequencies
+    (ie. 10.5Hz) are not supported. Note: This call will block until the CPU is able to `.put` the
+    input value into the state machine. If you are changing between low frequencies, this call can
+    block until the state machine has had time to clock out the output and ingest the input. This
+    guarantees that each unique input will get converted to output, all desired frequencies will
+    occur.
     """
 
     state_machine = rp2.StateMachine(
         state_machine_index, prog=square_waver_pio, set_base=output_pin, freq=clock_freq_hz
     )
 
-    def write_frequency_if_active(frequency_hz: int) -> None:
-        """
-        If the state machine is active, convert the input frequency to count and send it to the
-        SM via the RX fifo. If the state machine is not active, do nothing.
-        :param frequency_hz: Desired frequency in Hertz.
-        :return: None
-        """
-        if state_machine.active():  # pylint: disable=no-value-for-parameter
-            state_machine.put(
-                square_waver_pio_frequency_to_counts(
-                    state_machine_frequency_hz=clock_freq_hz, frequency_hz=frequency_hz
-                )
-            )
+    # Used to prevent unneeded writes.
+    previous_frequency: "t.Optional[int]" = None
 
-    state_machine.active(init_enabled)
+    def write_frequency_if_active(frequency_hz: int) -> bool:
+        """
+        Accepts the target frequency in hz as an argument, and returns whether or not the state
+        machine was written to. If you send the same frequency twice in a row, the state machine's
+        state will be exactly the same and the write will be skipped. Float frequencies (ie. 10.5Hz)
+        are not supported.
+        :param frequency_hz: Desired frequency in Hertz.
+        :return: True if the state machine was modified, false if the input was ignored because the
+        state machine would not change. Note: This call will block until the CPU is able to `.put`
+        the input value into the state machine. If you are changing between low frequencies, this
+        call can block until the state machine has had time to clock out the output and ingest the
+        input. This guarantees that each unique input will get converted to output, all desired
+        frequencies will occur.
+        """
+        nonlocal previous_frequency
+        if frequency_hz != previous_frequency:
+            if frequency_hz == 0:
+                state_machine.active(False)
+                output_pin.off()
+            else:
+                if not state_machine.active():  # pylint: disable=no-value-for-parameter
+                    state_machine.active(True)
+                state_machine.put(
+                    square_waver_pio_frequency_to_counts(
+                        state_machine_frequency_hz=clock_freq_hz, frequency_hz=frequency_hz
+                    )
+                )
+            previous_frequency = frequency_hz
+            return True
+        return False
+
     write_frequency_if_active(init_frequency_hz)
 
-    return SquareWaveController(
-        set_frequency_hz=write_frequency_if_active,
-        enable=lambda: state_machine.active(True),
-        disable=lambda: state_machine.active(False),
-    )
-
-
-def main() -> None:
-    """
-    Sample entrypoint. Prints pulse duration periodically.
-    :return: None
-    """
-
-    wave_controller = write_square_wave(
-        output_pin=Pin(0, Pin.OUT),
-        state_machine_index=0,
-        init_enabled=False,
-    )
-
-    wave_controller.enable()
-    wave_controller.set_frequency_hz(10_000.5)
-
-    while True:
-        pass
-
-
-if __name__ == "__main__":
-    main()
+    return write_frequency_if_active
