@@ -4,9 +4,11 @@
 
 mkdir /pyboard/tesla_cooler
 mkdir /pyboard/tesla_cooler/read_write_pulse
+mkdir /pyboard/tesla_cooler/temperature_module
 
 cp ./tesla_cooler/* /pyboard/tesla_cooler/
 cp ./tesla_cooler/read_write_pulse/* /pyboard/tesla_cooler/read_write_pulse/
+cp ./tesla_cooler/temperature_module/* /pyboard/tesla_cooler/temperature_module/
 cp ./*.py /pyboard/
 
 repl ~ from main_test import main ~ main()
