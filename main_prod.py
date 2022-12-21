@@ -116,7 +116,9 @@ def main() -> None:
     :return: None
     """
 
-    resistance_to_temperature = thermistor.read_resistance_to_temperature()
+    resistance_to_temperature = thermistor.read_resistance_to_temperature(
+        lookup_json_path=thermistor.B2550_3950K_10K_JSON_PATH
+    )
 
     # "Hot side" GPU -- The underside of the card is right up against the other GPU
     Timer().init(

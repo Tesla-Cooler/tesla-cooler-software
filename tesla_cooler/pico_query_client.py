@@ -59,7 +59,7 @@ def configure_temperature_reader(
 
     # This will be used in either case to read the environmental ADCs.
     resistance_to_temp_environment = thermistor.read_resistance_to_temperature(
-        lookup_json_path=thermistor.BARREL_JSON_PATH
+        lookup_json_path=thermistor.B2550_3950K_10K_JSON_PATH
     )
 
     if temperature_module_mode:
@@ -108,7 +108,7 @@ def configure_temperature_reader(
             """
 
             resistance_to_temp_washer = thermistor.read_resistance_to_temperature(
-                lookup_json_path=thermistor.WASHER_JSON_PATH
+                lookup_json_path=thermistor.B2585_3984K_10K_JSON_PATH
             )
 
             return TemperatureReading(

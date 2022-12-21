@@ -21,9 +21,15 @@ U_16_MAX = 65535
 # Determined experimentally
 DEFAULT_THERMISTOR_SAMPLES = 10
 
-# TODO get the real names for these sensor and rename accordingly.
-BARREL_JSON_PATH = "./tesla_cooler/10K_3950_NTC_temperature_lookup.json"
-WASHER_JSON_PATH = "./tesla_cooler/10K_washer_NTC_temperature_lookup.json"
+# These are the 'barrel' type thermistors used in the original tesla cooler.
+B2550_3950K_10K_JSON_PATH = (
+    "./tesla_cooler/10K_B2550_ 3950K_NTC_temperature_to_resistance_lookup.json"
+)
+
+# This works with Ring Lug type NTCALUG03A103GC.
+B2585_3984K_10K_JSON_PATH = (
+    "./tesla_cooler/10K_B2585_3984K_NTC_temperature_to_resistance_lookup.json"
+)
 
 
 def _thermistor_resistance(
@@ -64,7 +70,7 @@ def _closest_to_value(
 
 
 def read_resistance_to_temperature(
-    lookup_json_path: str = BARREL_JSON_PATH,
+    lookup_json_path: str,
 ) -> Dict[float, float]:
     """
     Reads a local json file that contains a series of keys mapping temperature to resistance.
@@ -98,17 +104,3 @@ def thermistor_temperature(pin_number: int, resistance_to_temperature: Dict[floa
             _thermistor_resistance(pin=ADC(pin_number)), list(resistance_to_temperature.keys())
         )
     ]
-
-
-def read_thermistor_temp_one_shot(thermistor_pin_number: int) -> float:
-    """
-    Read mapping from disk, and consume it to get the current temperature of the attached
-    thermistor.
-    Note: this is inefficient because you throw away the mapping dict after use.
-    :param thermistor_pin_number: Pin associated w/ thermistor.
-    :return: Current temperature in degrees.
-    """
-
-    return thermistor_temperature(
-        pin_number=thermistor_pin_number, resistance_to_temperature=read_resistance_to_temperature()
-    )
