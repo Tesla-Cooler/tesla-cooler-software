@@ -21,7 +21,9 @@ U_16_MAX = 65535
 # Determined experimentally
 DEFAULT_THERMISTOR_SAMPLES = 10
 
-DEFAULT_JSON_PATH = "./tesla_cooler/10K_3950_NTC_temperature_lookup.json"
+# TODO get the real names for these sensor and rename accordingly.
+BARREL_JSON_PATH = "./tesla_cooler/10K_3950_NTC_temperature_lookup.json"
+WASHER_JSON_PATH = "./tesla_cooler/10K_washer_NTC_temperature_lookup.json"
 
 
 def _thermistor_resistance(
@@ -62,7 +64,7 @@ def _closest_to_value(
 
 
 def read_resistance_to_temperature(
-    lookup_json_path: str = DEFAULT_JSON_PATH,
+    lookup_json_path: str = BARREL_JSON_PATH,
 ) -> Dict[float, float]:
     """
     Reads a local json file that contains a series of keys mapping temperature to resistance.
@@ -75,7 +77,7 @@ def read_resistance_to_temperature(
 
         # Need to multiply by 1000 because file is in kOhm
         resistance_to_temperature: Dict[float, float] = {
-            float(resistance_str) * 1000: float(temperature_str)
+            float(resistance_str): float(temperature_str)
             for temperature_str, resistance_str in lookup_dict.items()
         }
 
