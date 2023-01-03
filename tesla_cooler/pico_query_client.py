@@ -88,11 +88,11 @@ def configure_temperature_reader(
             return TemperatureReading(
                 zone_1=temperature_module_readings.tmp1,
                 zone_2=temperature_module_readings.tmp2,
-                intake=thermistor.thermistor_temperature(
+                intake=thermistor.rp2040_adc_thermistor_temperature(
                     pin_number=INTAKE_PIN,
                     resistance_to_temperature=resistance_to_temp_environment,
                 ),
-                exhaust=thermistor.thermistor_temperature(
+                exhaust=thermistor.rp2040_adc_thermistor_temperature(
                     pin_number=INTAKE_PIN,  # TODO: Wrong!
                     resistance_to_temperature=resistance_to_temp_environment,
                 ),
@@ -112,19 +112,19 @@ def configure_temperature_reader(
             )
 
             return TemperatureReading(
-                zone_1=thermistor.thermistor_temperature(
+                zone_1=thermistor.rp2040_adc_thermistor_temperature(
                     pin_number=Z1_PIN,
                     resistance_to_temperature=resistance_to_temp_washer,
                 ),
-                zone_2=thermistor.thermistor_temperature(
+                zone_2=thermistor.rp2040_adc_thermistor_temperature(
                     pin_number=Z2_PIN,
                     resistance_to_temperature=resistance_to_temp_washer,
                 ),
-                intake=thermistor.thermistor_temperature(
+                intake=thermistor.rp2040_adc_thermistor_temperature(
                     pin_number=INTAKE_PIN,
                     resistance_to_temperature=resistance_to_temp_environment,
                 ),
-                exhaust=thermistor.thermistor_temperature(
+                exhaust=thermistor.rp2040_adc_thermistor_temperature(
                     pin_number=INTAKE_PIN,  # TODO: Wrong!
                     resistance_to_temperature=resistance_to_temp_environment,
                 ),

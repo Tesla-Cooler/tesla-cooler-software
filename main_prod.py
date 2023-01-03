@@ -79,7 +79,7 @@ def create_cooler_callback(
         :return: None
         """
 
-        thermistor_temperature = thermistor.thermistor_temperature(
+        thermistor_temperature = thermistor.rp2040_adc_thermistor_temperature(
             pin_number=thermistor_pin, resistance_to_temperature=resistance_to_temperature
         )
 
