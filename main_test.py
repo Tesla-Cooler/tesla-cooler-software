@@ -2,7 +2,7 @@
 Entry point for development.
 """
 
-from tesla_cooler.mcp_3008 import loop_read
+from tesla_cooler.pico_query_client import query_loop
 
 
 def main() -> None:
@@ -11,4 +11,4 @@ def main() -> None:
     :return: None
     """
 
-    loop_read()
+    query_loop()

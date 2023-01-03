@@ -40,8 +40,8 @@ def thermistor_resistance(
     samples: int = DEFAULT_THERMISTOR_SAMPLES,
 ) -> float:
     """
-    Compute the resistance of the thermistor at the given PIN.
-    :param pin: The ADC interface that is associated with the pin connected to the thermistor.
+    Convert ADC counts into resistance.
+    :param adc_count: The ADC interface that is associated with the pin connected to the thermistor.
     :param pulldown_resistance: The value of the pulldown resistor in ohms.
     :param v_in_count: The ADC count (in the u16 number space) for V_in, the max value that could
     be read from the ADC.
@@ -92,14 +92,14 @@ def read_resistance_to_temperature(
 
 
 def thermistor_temperature_resistance(
-    resistance, resistance_to_temperature: Dict[float, float]
+    resistance: float, resistance_to_temperature: Dict[float, float]
 ) -> float:
     """
-    Read the temperature off of a thermistor attached the given pin.
-    :param pin_number: The pin connected to the thermistor.
+    Given a resistance and lookup, convert to temperature.
+    :param resistance: Thermistor resistance.
     :param resistance_to_temperature: A dict mapping resistance values to their corresponding
     temperature. Units are ohms and degrees Celsius.
-    :return: A function that when called returns the current temperature of the thermistor.
+    :return: Temperature in degrees Celsius.
     """
 
     return resistance_to_temperature[
@@ -114,11 +114,12 @@ def rp2040_adc_thermistor_temperature(
     pin_number: int, resistance_to_temperature: Dict[float, float]
 ) -> float:
     """
+    Convenience wrapper to read the temperature of a thermistor attached to an rp2040 ADC pin.
     Read the temperature off of a thermistor attached the given pin.
     :param pin_number: The pin connected to the thermistor.
     :param resistance_to_temperature: A dict mapping resistance values to their corresponding
     temperature. Units are ohms and degrees Celsius.
-    :return: A function that when called returns the current temperature of the thermistor.
+    :return: Temperature in degrees Celsius.
     """
 
     return thermistor_temperature_resistance(

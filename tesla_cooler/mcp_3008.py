@@ -1,6 +1,8 @@
-import machine
+"""
+Interface for the MCP3008 SPI ADC.
+"""
+
 from machine import SPI, Pin
-from tesla_cooler import thermistor
 
 try:
     import typing as t  # pylint: disable=unused-import
@@ -8,12 +10,15 @@ except ImportError:
     pass  # we're probably on the pico if this occurs.
 
 
-def mcp3008_reader(spi: SPI, chip_select: Pin, channels: "t.Tuple[int, ...]") -> "t.Callable[[], t.List[int]]":
+def mcp3008_reader(
+    spi: SPI,
+    chip_select: Pin,
+) -> "t.Callable[[int], int]":
     """
-
-    :param spi:
-    :param chip_select:
-    :return:
+    Configure the attached MCP3008 and return an interface for reading data.
+    :param spi: Usable SPI interface to talk to the MCP with.
+    :param chip_select: Chip select `Pin` to enable/disable on writes.
+    :return: Callable that takes the MCP channel number and returns the ADC counts.
     """
 
     # Must be same length to use `write_readinto`.
@@ -26,9 +31,9 @@ def mcp3008_reader(spi: SPI, chip_select: Pin, channels: "t.Tuple[int, ...]") ->
 
     def read_channel(channel: int) -> int:
         """
-
-        :param channel:
-        :return:
+        Read the ADC counts for the given channel.
+        :param channel: Channel index, 0-7.
+        :return: The current ADC counts for the given channel.
         """
 
         chip_select.off()
@@ -38,44 +43,4 @@ def mcp3008_reader(spi: SPI, chip_select: Pin, channels: "t.Tuple[int, ...]") ->
 
         return ((input_buf[1] & 0x03) << 8) | input_buf[2]
 
-    def read_channels() -> "t.List[int]":
-        """
-
-        :return:
-        """
-        return list(map(read_channel, channels))
-
-    return read_channels
-
-
-def loop_read() -> None:
-    """
-
-    :return:
-    """
-
-    cs = machine.Pin(5, machine.Pin.OUT)
-    cs.off()
-
-    spi = machine.SPI(
-        0,
-        sck=machine.Pin(2),
-        mosi=machine.Pin(3),
-        miso=machine.Pin(4),
-    )
-
-    reader = mcp3008_reader(spi=spi, chip_select=cs, channels=(0, 1, 2))
-
-    lookup = thermistor.read_resistance_to_temperature(thermistor.B2550_3950K_10K_JSON_PATH)
-
-    while True:
-
-
-
-        print(f"Temperatures: {        [thermistor.thermistor_temperature_resistance(
-            resistance=thermistor.thermistor_resistance(
-            adc_count=adc_count,
-            v_in_count=thermistor.U_10_MAX,
-        ),
-            resistance_to_temperature=lookup
-        ) for adc_count in reader() ]}")
+    return read_channel
