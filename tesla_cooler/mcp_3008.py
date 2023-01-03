@@ -8,7 +8,7 @@ except ImportError:
     pass  # we're probably on the pico if this occurs.
 
 
-def mcp3008_reader(spi: SPI, chip_select: Pin) -> "t.Callable[[int], int]":
+def mcp3008_reader(spi: SPI, chip_select: Pin, channels: "t.Tuple[int, ...]") -> "t.Callable[[], t.List[int]]":
     """
 
     :param spi:
@@ -24,7 +24,7 @@ def mcp3008_reader(spi: SPI, chip_select: Pin) -> "t.Callable[[int], int]":
 
     chip_select.on()  # Initially disable
 
-    def read(channel: int) -> int:
+    def read_channel(channel: int) -> int:
         """
 
         :param channel:
@@ -38,7 +38,14 @@ def mcp3008_reader(spi: SPI, chip_select: Pin) -> "t.Callable[[int], int]":
 
         return ((input_buf[1] & 0x03) << 8) | input_buf[2]
 
-    return read
+    def read_channels() -> "t.List[int]":
+        """
+
+        :return:
+        """
+        return list(map(read_channel, channels))
+
+    return read_channels
 
 
 def loop_read() -> None:
@@ -57,26 +64,18 @@ def loop_read() -> None:
         miso=machine.Pin(4),
     )
 
-    reader = mcp3008_reader(spi, cs)
+    reader = mcp3008_reader(spi=spi, chip_select=cs, channels=(0, 1, 2))
 
     lookup = thermistor.read_resistance_to_temperature(thermistor.B2550_3950K_10K_JSON_PATH)
 
     while True:
 
-        adc_count = reader(0)
 
-        print(f"ADC count: {adc_count}")
 
-        resistance = thermistor.thermistor_resistance(
+        print(f"Temperatures: {        [thermistor.thermistor_temperature_resistance(
+            resistance=thermistor.thermistor_resistance(
             adc_count=adc_count,
             v_in_count=thermistor.U_10_MAX,
-        )
-
-        print(f"Resistance: {resistance}")
-
-        temperature = thermistor.thermistor_temperature_resistance(
-            resistance=resistance,
+        ),
             resistance_to_temperature=lookup
-        )
-
-        print(f"Temperature: {temperature}")
+        ) for adc_count in reader() ]}")
