@@ -1,5 +1,5 @@
 """
-docker run --rm --gpus '"device=0,1"' gpu_burn 500
+Export high-level controls for the temperature module board.
 """
 
 
@@ -8,6 +8,7 @@ from time import sleep
 from machine import I2C, Pin
 
 from tesla_cooler.temperature_module import io_expander, temperature_sensor
+from tesla_cooler.temperature_module.temperature_sensor import TemperatureModuleReadings
 
 try:
     import typing as t  # pylint: disable=unused-import
@@ -21,10 +22,10 @@ ADDRESS_1 = 19
 ADDRESS_0 = 18
 
 
-def proof_of_concept() -> None:
+def configured_temperature_reader() -> "t.Tuple[I2C, t.Callable[[], TemperatureModuleReadings]]":
     """
-
-    :return:
+    Given the current global pin mapping, enable and return a temperature reader.
+    :return: A tuple (configured i2c interface, temperature reader).
     """
 
     address_0 = Pin(ADDRESS_0, Pin.OUT)
@@ -35,9 +36,19 @@ def proof_of_concept() -> None:
 
     i2c = I2C(0, scl=Pin(I2C_SCL), sda=Pin(I2C_SDA), freq=100_000)
 
-    reader = temperature_sensor.create_reader(
-        i2c=i2c, tmp1_address=0b1001100, tmp2_address=0b1001110
+    return i2c, temperature_sensor.create_reader(
+        i2c=i2c, tmp1_address=0b1001_100, tmp2_address=0b1001_110
     )
+
+
+def proof_of_concept() -> None:
+    """
+
+    :return:
+    """
+
+    i2c, reader = configured_temperature_reader()
+
     io_writer = io_expander.create_io_writer(i2c=i2c, address=0b0100100)
 
     while True:

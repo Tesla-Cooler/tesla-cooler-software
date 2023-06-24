@@ -12,10 +12,11 @@ import json
 import struct
 from collections import namedtuple
 
-from machine import I2C, UART, Pin
+from machine import SPI, UART, Pin
 
 from tesla_cooler import thermistor
-from tesla_cooler.temperature_module import temperature_sensor
+from tesla_cooler.mcp_3008 import mcp3008_reader
+from tesla_cooler.temperature_module import configured_temperature_reader
 
 BAUD = 115200
 
@@ -29,15 +30,6 @@ CLIENT_INFO = {
     "zone_sensors_type": "Washer Thermistor",
 }
 
-# Pin mappings
-I2C_SCL_PIN = 21
-I2C_SDA_PIN = 20
-ADDRESS_1_PIN = 19
-ADDRESS_0_PIN = 18
-
-Z1_PIN = 26
-Z2_PIN = 27
-INTAKE_PIN = 28
 
 TemperatureReading = namedtuple(
     "TemperatureReading",
@@ -62,21 +54,39 @@ def configure_temperature_reader(
         lookup_json_path=thermistor.B2550_3950K_10K_JSON_PATH
     )
 
-    if temperature_module_mode:
+    mcp_reader = mcp3008_reader(
+        spi=SPI(
+            0,
+            sck=Pin(2),
+            mosi=Pin(3),
+            miso=Pin(4),
+        ),
+        chip_select=Pin(5, Pin.OUT),
+    )
 
-        address_0 = Pin(ADDRESS_0_PIN, Pin.OUT)
-        address_1 = Pin(ADDRESS_1_PIN, Pin.OUT)
+    def mcp_temperature(
+        mcp_channel: int, lookup: "t.Dict[float, float]" = resistance_to_temp_environment
+    ) -> float:
+        """
+        Wrapper to get current temperature of a thermistor attached to an MCP channel.
+        :param mcp_channel: Channel to read.
+        :param lookup: Mapping for the attached thermistor.
+        :return: Temperature in degrees Celsius.
+        """
 
-        address_0.off()
-        address_1.off()
-
-        i2c = I2C(0, scl=Pin(I2C_SCL_PIN), sda=Pin(I2C_SDA_PIN), freq=100_000)
-
-        tm_reader = temperature_sensor.create_reader(
-            i2c=i2c, tmp1_address=0b1001100, tmp2_address=0b1001110
+        return thermistor.thermistor_temperature_resistance(
+            resistance=thermistor.thermistor_resistance(
+                adc_count=mcp_reader(mcp_channel),
+                v_in_count=thermistor.U_10_MAX,
+            ),
+            resistance_to_temperature=lookup,
         )
 
-        def reader() -> TemperatureReading:
+    if temperature_module_mode:
+
+        _, tm_reader = configured_temperature_reader()
+
+        def output() -> TemperatureReading:
             """
             Temperature module reader. When called, reads from the attached temperature module
             and ADCs.
@@ -88,19 +98,13 @@ def configure_temperature_reader(
             return TemperatureReading(
                 zone_1=temperature_module_readings.tmp1,
                 zone_2=temperature_module_readings.tmp2,
-                intake=thermistor.thermistor_temperature(
-                    pin_number=INTAKE_PIN,
-                    resistance_to_temperature=resistance_to_temp_environment,
-                ),
-                exhaust=thermistor.thermistor_temperature(
-                    pin_number=INTAKE_PIN,  # TODO: Wrong!
-                    resistance_to_temperature=resistance_to_temp_environment,
-                ),
+                intake=mcp_temperature(mcp_channel=1),
+                exhaust=mcp_temperature(mcp_channel=0),
             )
 
     else:
 
-        def reader() -> TemperatureReading:
+        def output() -> TemperatureReading:
             """
             ADC Temperature Reader. Looks up temperatures in the provided LUT for the sensor.
             This is likely going to have to change.
@@ -112,39 +116,27 @@ def configure_temperature_reader(
             )
 
             return TemperatureReading(
-                zone_1=thermistor.thermistor_temperature(
-                    pin_number=Z1_PIN,
-                    resistance_to_temperature=resistance_to_temp_washer,
-                ),
-                zone_2=thermistor.thermistor_temperature(
-                    pin_number=Z2_PIN,
-                    resistance_to_temperature=resistance_to_temp_washer,
-                ),
-                intake=thermistor.thermistor_temperature(
-                    pin_number=INTAKE_PIN,
-                    resistance_to_temperature=resistance_to_temp_environment,
-                ),
-                exhaust=thermistor.thermistor_temperature(
-                    pin_number=INTAKE_PIN,  # TODO: Wrong!
-                    resistance_to_temperature=resistance_to_temp_environment,
-                ),
+                zone_1=mcp_temperature(mcp_channel=2, lookup=resistance_to_temp_washer),
+                zone_2=mcp_temperature(mcp_channel=3, lookup=resistance_to_temp_washer),
+                exhaust=mcp_temperature(mcp_channel=0),
+                intake=mcp_temperature(mcp_channel=1),
             )
 
-    return reader
+    return output
 
 
-def query_loop(temperature_module_mode: bool = False) -> None:
+def query_loop() -> None:
     """
     Entrypoint for the Pico Query client. Waits for messages to arrive on the external UART
     interface and replies in kind. Currently doesn't handle errors well.
-    :param temperature_module_mode: If the reported values should be from the temperature module
-    via I2C or not (meaning it'll return converted ADC values). This needs to match the physical
-    circuit so tread with caution.
     :return: None
     """
 
     uart_port = UART(0, baudrate=BAUD, tx=Pin(16), rx=Pin(17), bits=8, parity=None, stop=1)
-    read_sensors = configure_temperature_reader(temperature_module_mode=temperature_module_mode)
+    read_sensors = configure_temperature_reader(temperature_module_mode=False)
+
+    print(f"Client Info: {CLIENT_INFO}")
+    print(f"Sample Reading: {read_sensors()}")
 
     while True:
         if uart_port.any():

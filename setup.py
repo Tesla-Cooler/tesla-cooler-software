@@ -16,7 +16,7 @@ def prod_dependencies() -> List[str]:
 
 setup(
     name="tesla_cooler",
-    version="0.2.2",
+    version="0.4.0",
     description=(
         "Firmware for a Raspberry Pi Pico to drive fans and cool NVIDIA Tesla compute GPUs."
     ),

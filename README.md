@@ -1,5 +1,8 @@
 # Tesla Cooler (Software) - `tesla_cooler` 
 
+**Warning!** This project is undergoing a massive change. Until things are stable, the branch
+`silent_cooler` is the development branch for this project. 
+
 ![](./image.jpg)
 
 Firmware for the Raspberry Pi Pico to drive fans and cool NVIDIA Tesla compute GPUs.

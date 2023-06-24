@@ -17,6 +17,7 @@ from tesla_cooler.pure_python_itertools import float_mean
 
 RESISTANCE_OF_PULLDOWN = 10_000
 U_16_MAX = 65535
+U_10_MAX = 1023
 
 # Determined experimentally
 DEFAULT_THERMISTOR_SAMPLES = 10
@@ -32,24 +33,24 @@ B2585_3984K_10K_JSON_PATH = (
 )
 
 
-def _thermistor_resistance(
-    pin: ADC,
+def thermistor_resistance(
+    adc_count: int,
     pulldown_resistance: int = RESISTANCE_OF_PULLDOWN,
-    vin_count: int = U_16_MAX,
+    v_in_count: int = U_16_MAX,
     samples: int = DEFAULT_THERMISTOR_SAMPLES,
 ) -> float:
     """
-    Compute the resistance of the thermistor at the given PIN.
-    :param pin: The ADC interface that is associated with the pin connected to the thermistor.
+    Convert ADC counts into resistance.
+    :param adc_count: The ADC interface that is associated with the pin connected to the thermistor.
     :param pulldown_resistance: The value of the pulldown resistor in ohms.
-    :param vin_count: The ADC count (in the u16 number space) for V_in, the max value that could
+    :param v_in_count: The ADC count (in the u16 number space) for V_in, the max value that could
     be read from the ADC.
     :param samples: The number of samples to take to average for the measurement.
     :return: The resistance in Ohms as a float.
     """
     return float_mean(
         [
-            float((pulldown_resistance * (vin_count / pin.read_u16())) - pulldown_resistance)
+            float((pulldown_resistance * (v_in_count / adc_count)) - pulldown_resistance)
             for _ in range(samples)
         ]
     )
@@ -90,17 +91,38 @@ def read_resistance_to_temperature(
     return resistance_to_temperature
 
 
-def thermistor_temperature(pin_number: int, resistance_to_temperature: Dict[float, float]) -> float:
+def thermistor_temperature_resistance(
+    resistance: float, resistance_to_temperature: Dict[float, float]
+) -> float:
     """
-    Read the temperature off of a thermistor attached the given pin.
-    :param pin_number: The pin connected to the thermistor.
+    Given a resistance and lookup, convert to temperature.
+    :param resistance: Thermistor resistance.
     :param resistance_to_temperature: A dict mapping resistance values to their corresponding
     temperature. Units are ohms and degrees Celsius.
-    :return: A function that when called returns the current temperature of the thermistor.
+    :return: Temperature in degrees Celsius.
     """
 
     return resistance_to_temperature[
         _closest_to_value(
-            _thermistor_resistance(pin=ADC(pin_number)), list(resistance_to_temperature.keys())
+            resistance,
+            list(resistance_to_temperature.keys()),
         )
     ]
+
+
+def rp2040_adc_thermistor_temperature(
+    pin_number: int, resistance_to_temperature: Dict[float, float]
+) -> float:
+    """
+    Convenience wrapper to read the temperature of a thermistor attached to an rp2040 ADC pin.
+    Read the temperature off of a thermistor attached the given pin.
+    :param pin_number: The pin connected to the thermistor.
+    :param resistance_to_temperature: A dict mapping resistance values to their corresponding
+    temperature. Units are ohms and degrees Celsius.
+    :return: Temperature in degrees Celsius.
+    """
+
+    return thermistor_temperature_resistance(
+        resistance=thermistor_resistance(adc_count=ADC(pin_number).read_u16()),
+        resistance_to_temperature=resistance_to_temperature,
+    )
