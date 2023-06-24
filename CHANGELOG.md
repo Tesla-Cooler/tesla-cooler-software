@@ -1,5 +1,13 @@
 # Changelog
 
+0.4.0 - (2023-06-24)
+------------------
+
+* Introduces `pico_query_client.py`, an interface for reading sensor values back to a host
+(at this point running [GPU Temperature Logger](https://github.com/Tesla-Cooler/gpu_temperature_logger)).
+* PCC can use MCP3008 to read thermistors.
+* Can read temp values/write LED states to/from "temperature module 1.0.0" 
+
 0.3.0 - (2022-09-05)
 ------------------
 

@@ -30,12 +30,6 @@ CLIENT_INFO = {
     "zone_sensors_type": "Washer Thermistor",
 }
 
-# Pin mappings
-I2C_SCL_PIN = 21
-I2C_SDA_PIN = 20
-ADDRESS_1_PIN = 19
-ADDRESS_0_PIN = 18
-
 
 TemperatureReading = namedtuple(
     "TemperatureReading",
@@ -131,18 +125,18 @@ def configure_temperature_reader(
     return output
 
 
-def query_loop(temperature_module_mode: bool = False) -> None:
+def query_loop() -> None:
     """
     Entrypoint for the Pico Query client. Waits for messages to arrive on the external UART
     interface and replies in kind. Currently doesn't handle errors well.
-    :param temperature_module_mode: If the reported values should be from the temperature module
-    via I2C or not (meaning it'll return converted ADC values). This needs to match the physical
-    circuit so tread with caution.
     :return: None
     """
 
     uart_port = UART(0, baudrate=BAUD, tx=Pin(16), rx=Pin(17), bits=8, parity=None, stop=1)
-    read_sensors = configure_temperature_reader(temperature_module_mode=temperature_module_mode)
+    read_sensors = configure_temperature_reader(temperature_module_mode=False)
+
+    print(f"Client Info: {CLIENT_INFO}")
+    print(f"Sample Reading: {read_sensors()}")
 
     while True:
         if uart_port.any():

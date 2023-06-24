@@ -1,5 +1,5 @@
 """
-docker run --rm --gpus '"device=0,1"' gpu_burn 500
+Export high-level controls for the temperature module board.
 """
 
 
@@ -37,7 +37,7 @@ def configured_temperature_reader() -> "t.Tuple[I2C, t.Callable[[], TemperatureM
     i2c = I2C(0, scl=Pin(I2C_SCL), sda=Pin(I2C_SDA), freq=100_000)
 
     return i2c, temperature_sensor.create_reader(
-        i2c=i2c, tmp1_address=0b1001100, tmp2_address=0b1001110
+        i2c=i2c, tmp1_address=0b1001_100, tmp2_address=0b1001_110
     )
 
 
